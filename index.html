@@ -9,9 +9,10 @@
 <meta name="apple-mobile-web-app-title" content="Позиция">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" id="themeColor" content="#eef1f5">
+<meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="app-icon-180.png">
+<link rel="icon" type="image/png" href="app-icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
@@ -59,7 +60,8 @@ html.theming, html.theming *{transition:background-color .35s ease, border-color
 /* header */
 header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 16px}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
-.brand svg{width:34px;height:34px;flex:none;border-radius:9px}
+.brand img,.brand svg{width:34px;height:34px;flex:none;border-radius:9px;object-fit:cover;box-shadow:var(--shadow)}
+.t-short{display:none}
 h1{font-family:var(--f-display);font-weight:700;font-size:clamp(18px,2.6vw,26px);letter-spacing:-.01em;margin:0;text-wrap:balance}
 .hright{display:flex;align-items:center;gap:10px}
 .balchip{display:flex;align-items:baseline;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 12px;box-shadow:var(--shadow)}
@@ -315,7 +317,7 @@ button{font:inherit}
 .login{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px 16px;
   background:radial-gradient(900px 500px at 80% -10%, var(--glow), transparent 60%), var(--bg)}
 .login .card{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:28px;display:flex;flex-direction:column;gap:18px;animation:rise .6s var(--ease) both}
-.login .card svg{width:48px;height:48px;border-radius:12px}
+.login .card img,.login .card svg{width:56px;height:56px;border-radius:14px;box-shadow:var(--shadow)}
 .login h2{font-family:var(--f-display);font-size:22px;margin:0}
 .login p{margin:0;color:var(--muted);font-size:14px}
 .login form{gap:14px}
@@ -323,6 +325,93 @@ button{font:inherit}
 .login .toast{min-height:20px}
 .sync-note{font-size:13px;color:var(--muted)}
 .migrate{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;background:var(--accent-soft);color:var(--ink);font-size:14px;width:100%}
+
+/* ================= телефон ================= */
+.tcards{display:none;flex-direction:column;gap:10px}
+.tcard{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2);cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit;transition:transform .15s, border-color .2s}
+.tcard:active{transform:scale(.985)}
+.tcard.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.tcard .l1{display:flex;align-items:center;gap:8px;min-width:0;font-weight:600;font-size:16px}
+.tcard .l1 b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tcard .l1 .tag{font-weight:500;font-size:11px}
+.tcard .l2{grid-column:1;font-size:12.5px;color:var(--muted);font-family:var(--f-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tcard .pnl{grid-row:1;grid-column:2;text-align:right;font-family:var(--f-mono);font-weight:600;font-size:17px}
+.tcard .r2{grid-column:2;text-align:right;display:flex;gap:6px;justify-content:flex-end;align-items:center;font-size:12px;color:var(--muted);font-family:var(--f-mono)}
+.tcard .bar2{grid-column:1/-1;height:3px;border-radius:2px;background:var(--line);overflow:hidden;margin-top:6px}
+.tcard .bar2 i{display:block;height:100%;background:var(--accent)}
+@keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.tcards.anim .tcard{animation:cardIn .4s var(--ease) both;animation-delay:calc(min(var(--i,0),12) * 35ms)}
+.fab{display:none}
+.calcbar{display:none}
+
+@media (max-width:640px){
+  body{font-size:15px;padding-inline:max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right))}
+  .wrap{gap:14px}
+  header{flex-wrap:nowrap;gap:8px}
+  .t-full{display:none} .t-short{display:inline}
+  h1{font-size:19px}
+  .brand{gap:10px}
+  .hright{gap:6px}
+  .balchip{padding:7px 10px}
+  .balchip b{font-size:15px}
+  .balchip i{display:none}
+  .iconbtn,.acctbtn{height:40px;width:40px;padding:0;justify-content:center}
+  .acctbtn svg{display:none}
+  .acctbtn .dot{width:10px;height:10px}
+  .acctbtn::after{content:"";width:18px;height:18px;margin-left:-4px;background:currentColor;
+    -webkit-mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>') center/contain no-repeat;
+            mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>') center/contain no-repeat}
+  .panel{padding:16px;border-radius:14px}
+  .grid,.col{gap:14px}
+  input,textarea,select{padding:11px 12px;border-radius:10px}
+  .btn{padding:12px 16px;border-radius:11px}
+  form .btns .btn{flex:1 1 auto}
+  .stat{padding:12px 14px}
+  .stat .v{font-size:18px}
+  .verdict{grid-template-columns:auto 1fr;gap:14px}
+  .ring{width:76px;height:76px}
+  .ring .num b{font-size:20px}
+  .badge{font-size:15px;padding:6px 11px}
+  .vbody p{font-size:14px}
+  /* таблица плеч: без колонки «% депо» */
+  #levBody td:nth-child(3), #view-calc thead th:nth-child(3){display:none}
+  td,th{padding-inline:8px}
+  /* сделки карточками */
+  #view-diary .tbl{display:none}
+  .tcards{display:flex}
+  .filters{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .filters select,.filters input{width:100%;padding:10px}
+  .filters input{grid-column:1/-1}
+  .filters #newTrade{display:none}
+  /* плавающая кнопка новой сделки */
+  .fab{display:grid;place-items:center;position:fixed;right:max(16px, env(safe-area-inset-right));bottom:calc(86px + env(safe-area-inset-bottom));z-index:25;
+       width:56px;height:56px;border-radius:18px;border:0;background:var(--accent);color:var(--on-accent);font-size:30px;line-height:1;cursor:pointer;
+       box-shadow:0 10px 30px -8px color-mix(in srgb,var(--accent) 70%,transparent);transition:transform .2s var(--ease), opacity .2s}
+  .fab:active{transform:scale(.92)}
+  .fab.hide{opacity:0;pointer-events:none;transform:scale(.8)}
+  /* панель итогов калькулятора над нижним меню */
+  .calcbar{display:flex;position:fixed;left:max(12px, env(safe-area-inset-left));right:max(12px, env(safe-area-inset-right));bottom:calc(84px + env(safe-area-inset-bottom));z-index:25;
+       align-items:center;gap:10px;padding:10px 12px;border-radius:14px;border:1px solid var(--line);
+       background:color-mix(in srgb, var(--panel) 92%, transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:var(--shadow);
+       transition:transform .35s var(--ease), opacity .3s;cursor:pointer}
+  .calcbar.hide{transform:translateY(20px);opacity:0;pointer-events:none}
+  .calcbar .cdot{width:10px;height:10px;border-radius:50%;flex:none;background:var(--muted)}
+  .calcbar.good .cdot{background:var(--good)} .calcbar.warn .cdot{background:var(--warn)} .calcbar.bad .cdot{background:var(--bad)}
+  .calcbar .ctxt{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25}
+  .calcbar .ctxt b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .calcbar .ctxt span{font:12px var(--f-mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .calcbar .cgo{font:600 13px var(--f-body);color:var(--accent);white-space:nowrap}
+  body.has-calcbar{padding-bottom:calc(160px + env(safe-area-inset-bottom))}
+  /* редактор сделки: кнопки всегда под рукой */
+  .editor .btns.edbar{position:sticky;bottom:calc(80px + env(safe-area-inset-bottom));z-index:5;margin:0 -16px -16px;padding:12px 16px;
+       background:color-mix(in srgb, var(--panel) 94%, transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);border-radius:0 0 14px 14px}
+  .editor .btns.edbar .btn{flex:1 1 auto}
+  .eg{gap:10px}
+  .sum b{font-size:14px}
+  .tabs button{font-size:12px}
+  .menu{top:calc(66px + env(safe-area-inset-top))}
+  .login .card{padding:22px}
+}
 
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
@@ -339,7 +428,7 @@ button{font:inherit}
 
 <div class="login" id="login" hidden>
   <div class="card">
-    <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="var(--accent)"/><rect x="21" y="19" width="9" height="25" rx="2" fill="var(--on-accent)"/><rect x="24.5" y="12" width="2" height="40" rx="1" fill="var(--on-accent)"/><rect x="35" y="15" width="17" height="4" rx="2" fill="var(--good)"/><rect x="35" y="30" width="17" height="4" rx="2" fill="var(--on-accent)"/><rect x="35" y="45" width="17" height="4" rx="2" fill="var(--bad)"/></svg>
+    <img src="app-icon-192.png" alt="" width="34" height="34">
     <div><h2>Калькулятор позиции</h2><p>Войдите, чтобы открыть свой дневник сделок на любом устройстве.</p></div>
     <form id="loginForm" novalidate>
       <div class="f"><label for="lgUser">Логин</label><input id="lgUser" autocomplete="username" autocapitalize="none" spellcheck="false"></div>
@@ -354,8 +443,8 @@ button{font:inherit}
 <div class="wrap">
   <header>
     <div class="brand">
-      <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="var(--accent)"/><rect x="21" y="19" width="9" height="25" rx="2" fill="var(--on-accent)"/><rect x="24.5" y="12" width="2" height="40" rx="1" fill="var(--on-accent)"/><rect x="35" y="15" width="17" height="4" rx="2" fill="var(--good)"/><rect x="35" y="30" width="17" height="4" rx="2" fill="var(--on-accent)"/><rect x="35" y="45" width="17" height="4" rx="2" fill="var(--bad)"/></svg>
-      <h1>Калькулятор позиции</h1>
+      <img src="app-icon-192.png" alt="" width="34" height="34">
+      <h1><span class="t-full">Калькулятор позиции</span><span class="t-short">Позиция</span></h1>
     </div>
     <div class="hright">
       <div class="balchip" title="Текущий депозит по дневнику"><span>Депозит</span><b id="hdrBal">—</b><i id="hdrChg"></i></div>
@@ -522,6 +611,7 @@ button{font:inherit}
           <thead><tr><th class="l">Дата</th><th class="l">Монета</th><th class="l">Категория</th><th>Ср. вход</th><th>Плечо</th><th>Маржа</th><th>Закрыто</th><th>P&amp;L, USDT</th><th>Статус</th></tr></thead>
           <tbody id="tradeBody" class="click"></tbody>
         </table></div>
+        <div class="tcards" id="tradeCards"></div>
         <p class="empty" id="tradeEmpty" hidden>Сделок пока нет. Рассчитайте вход в «Калькуляторе» и нажмите «Записать в дневник», или добавьте сделку кнопкой «+ Сделка».</p>
       </div>
 
@@ -538,6 +628,10 @@ button{font:inherit}
     </div>
   </section>
 
+  <button type="button" class="fab hide" id="fab" aria-label="Новая сделка">+</button>
+  <div class="calcbar hide" id="calcBar" role="button" tabindex="0" aria-label="Показать итоги расчёта">
+    <span class="cdot"></span><span class="ctxt"><b id="cbTitle">—</b><span id="cbSub"></span></span><span class="cgo">Итоги ↓</span>
+  </div>
   <datalist id="catList"><option value="Скальп"><option value="Интрадей"><option value="Свинг"><option value="Позиционная"><option value="Новости"></datalist>
   <datalist id="coinList"></datalist>
 </div>
@@ -719,6 +813,7 @@ function setTab(t, first){
   $('view-calc').hidden = t!=='calc'; $('view-diary').hidden = t!=='diary';
   if(changed){ v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter'); }
   lsSet('poscalc.tab', t);
+  if(typeof updateMobileBars==='function') updateMobileBars();
   if(first) return;
   if(t==='diary' && changed){ S.animRows=true; renderTrades(); renderBreakdown(); renderEquity({fromZero:true}); }
   if(t==='calc' && changed) renderCalc();
@@ -821,6 +916,7 @@ function renderCalc(){
     return `<tr class="${isU?'rec':''}" data-lev="${r.L}" tabindex="0"><td class="l">x${r.L}${isU?(c.manual?' ← ваш выбор':' ← выбор'):isRec?' · авто':''}</td><td>${fmt(r.margin,2)}</td><td>${fmt(r.margin/c.D*100,1)}%</td><td>${fmt(r.liq,pd)}</td><td>${t}</td></tr>`;
   }).join(''):`<tr><td class="l" colspan="5">Укажите разрешённые плечи.</td></tr>`;
   lastCalc={c,s,badge,cls};
+  updateMobileBars();
 }
 $('levBody').addEventListener('click',e=>{ const tr=e.target.closest('tr[data-lev]'); if(!tr) return; const L=+tr.dataset.lev; S.levPick = (lastCalc && lastCalc.c.rec && lastCalc.c.rec.L===L) ? null : L; renderCalc(); });
 $('levBody').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const tr=e.target.closest('tr[data-lev]'); if(tr) tr.click(); } });
@@ -1018,17 +1114,54 @@ function renderTrades(){
       <td class="${c.net>0?'pos':c.net<0?'neg':''}">${sgn(c.net)}<span class="sub">${isFinite(c.R)&&c.closedPct>0?sgn(c.R)+'R · ':''}${isFinite(c.roe)?sgn(c.roe,1)+'% ROE':''}</span></td>
       <td><span class="tag ${st[1]}">${st[0]}</span></td></tr>`;
   }).join('') : (S.trades.length?`<tr><td class="l" colspan="9">Нет сделок под этот фильтр.</td></tr>`:'');
+  const cards=$('tradeCards');
+  cards.classList.toggle('anim', body.classList.contains('anim'));
+  cards.innerHTML = rows.length ? rows.map(({t,c},n)=>{
+    const st=STATUS[c.status], sel=S.draft&&S.draft.id&&S.draft.id===t.id, pd=priceDec(c.avg), adds=(t.entries||[]).length-1;
+    return `<button type="button" class="tcard ${sel?'sel':''}" data-id="${esc(t.id)}" style="--i:${n}">
+      <span class="l1"><span class="dir ${t.side==='short'?'short':'long'}">${t.side==='short'?'SHORT':'LONG'}</span><b>${esc(t.coin||'—')}</b><span class="tag ${st[1]}">${st[0]}</span></span>
+      <span class="pnl ${c.net>0?'pos':c.net<0?'neg':''}">${sgn(c.net)}</span>
+      <span class="l2">${ddmm(t.date)} · x${fmt(c.L,0)} · ${fmt(c.avg,pd)}${adds>0?' · +'+adds+' ус.':''}${t.category?' · '+esc(t.category):''}</span>
+      <span class="r2">${isFinite(c.roe)&&c.closedPct>0?sgn(c.roe,1)+'% ROE':''}</span>
+      ${c.status!=='closed'?`<span class="bar2"><i style="width:${Math.min(100,c.closedPct)}%"></i></span>`:''}
+    </button>`;
+  }).join('') : (S.trades.length?'<p class="empty">Нет сделок под этот фильтр.</p>':'');
 }
 ['fStatus','fCat','fCoin'].forEach(id=>$(id).addEventListener('input',()=>{ S.animRows=true; renderTrades(); }));
 function openTrade(id){ const t=S.trades.find(x=>x.id===id); if(!t) return; S.draft=JSON.parse(JSON.stringify(t)); if(S.draft.funding==null) S.draft.funding=''; S.delArm=false; renderEditor(true); renderTrades(); $('editor').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}); }
+$('tradeCards').addEventListener('click',e=>{ const c=e.target.closest('.tcard[data-id]'); if(c) openTrade(c.dataset.id); });
 $('tradeBody').addEventListener('click',e=>{ const tr=e.target.closest('tr[data-id]'); if(tr) openTrade(tr.dataset.id); });
 $('tradeBody').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const tr=e.target.closest('tr[data-id]'); if(tr) openTrade(tr.dataset.id); } });
 $('newTrade').addEventListener('click',()=>{ S.draft=newTrade(); S.delArm=false; renderEditor(true); renderTrades(); $('editor').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}); setTimeout(()=>$('ed-coin')&&$('ed-coin').focus({preventScroll:true}),350); });
 
+/* =================== мобильные элементы =================== */
+const isPhone = () => matchMedia('(max-width:640px)').matches;
+$('fab').addEventListener('click',()=>$('newTrade').click());
+$('calcBar').addEventListener('click',()=>$('verdict').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}));
+$('calcBar').addEventListener('keydown',e=>{ if(e.key==='Enter') $('calcBar').click(); });
+let verdictSeen=false;
+if('IntersectionObserver' in window){
+  new IntersectionObserver(es=>{ verdictSeen = es.some(e=>e.isIntersecting) || es[0].boundingClientRect.top<0; updateMobileBars(); },{threshold:0.01}).observe($('verdict'));
+}
+function updateMobileBars(){
+  const phone=isPhone(), onCalc=S.tab==='calc', onDiary=S.tab==='diary';
+  const showBar = phone && onCalc && !!lastCalc && !verdictSeen;
+  $('calcBar').classList.toggle('hide', !showBar);
+  document.body.classList.toggle('has-calcbar', phone && onCalc);
+  $('fab').classList.toggle('hide', !(phone && onDiary && !S.draft));
+  if(lastCalc){ const {c,badge,cls}=lastCalc, u=c.use;
+    $('calcBar').className='calcbar '+cls+(showBar?'':' hide');
+    $('cbTitle').textContent=badge;
+    $('cbSub').textContent = u ? `Вход ${fmt(u.margin,2)} · x${u.L} · риск ${fmt(c.riskUsd,2)}` : `Риск ${fmt(c.riskUsd,2)} USDT`;
+  }
+}
+window.addEventListener('resize',updateMobileBars);
+
 /* =================== editor =================== */
 function renderEditor(opening){
   const ed=$('editor'), d=S.draft;
-  if(!d){ ed.hidden=true; ed.innerHTML=''; return; }
+  if(!d){ ed.hidden=true; ed.innerHTML=''; updateMobileBars(); return; }
+  setTimeout(updateMobileBars,0);
   ed.hidden=false;
   if(opening && !RM){ ed.classList.remove('opening'); void ed.offsetWidth; ed.classList.add('opening'); }
   const plan = d.plan ? `<span class="tag info">План: ${esc(d.plan.verdict)} · ММ ${d.plan.score}/100${d.plan.rr?` · 1:${fmt(d.plan.rr,2)}`:''}${d.prob?` · ${d.prob}%`:''}</span>` : '';
@@ -1064,7 +1197,7 @@ function renderEditor(opening){
 
     <div class="f"><label for="ed-comment">Почему вошёл, заметки по сделке</label><textarea id="ed-comment" data-k="comment">${esc(d.comment)}</textarea></div>
 
-    <div class="btns">
+    <div class="btns edbar">
       <button type="button" class="btn" id="edSave">${d.id?'Сохранить':'Добавить в дневник'}</button>
       <button type="button" class="btn ghost" id="edCancel">Закрыть</button>
       ${d.id?`<button type="button" class="btn danger ${S.delArm?'arm':''}" id="edDel">${S.delArm?'Точно удалить?':'Удалить'}</button>`:''}
@@ -1197,10 +1330,10 @@ $('importFile').addEventListener('change', async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f) return;
   let data; try{ data=JSON.parse(await f.text()); }catch(err){ backupMsg('Файл не читается. Выберите файл копии .json из этого приложения.',true); return; }
   if(!data || data.app!=='poscalc' || !Array.isArray(data.trades)){ backupMsg('Это не файл копии калькулятора.',true); return; }
-  const r=mergeBackup(data); markAllDirty(); saveLocal(); scheduleSync(0); S.animRows=true; renderAll({eq:'morph'}); renderEditor();
-  backupMsg(`Готово: добавлено ${r.added}, обновлено ${r.updated}, удалено ${r.removed}.`);
+  const r=mergeBackup(data, true); markAllDirty(); saveLocal(); scheduleSync(0); S.animRows=true; renderAll({eq:'morph'}); renderEditor();
+  backupMsg(`Готово: добавлено ${r.added}, обновлено ${r.updated}, удалено ${r.removed}.`+(r.dep!=null?` Стартовый депозит: ${fmt(r.dep,2)}.`:''));
 });
-function mergeBackup(data){
+function mergeBackup(data, force){
   const res={added:0,updated:0,removed:0};
   S.deleted=Object.assign({}, S.deleted||{});
   Object.entries(data.deleted||{}).forEach(([id,ts])=>{ if(!(S.deleted[id]>=ts)) S.deleted[id]=ts; });
@@ -1214,7 +1347,10 @@ function mergeBackup(data){
   });
   for(const [id,t] of byId){ if(S.deleted[id] && S.deleted[id] >= (t.updatedAt||0)){ byId.delete(id); res.removed++; } }
   S.trades=[...byId.values()];
-  if(data.profile && (data.profile.updatedAt||0) > (S.profile.updatedAt||0)){ S.profile=Object.assign({startDeposit:1000}, data.profile); S.profileDirty=true; }
+  if(data.profile && isFinite(pnum(data.profile.startDeposit)) && (force || (data.profile.updatedAt||0) > (S.profile.updatedAt||0))){
+    if(pnum(data.profile.startDeposit)!==pnum(S.profile.startDeposit)) res.dep=pnum(data.profile.startDeposit);
+    S.profile=Object.assign({startDeposit:1000}, data.profile, {updatedAt:Date.now()}); S.profileDirty=true;
+  }
   return res;
 }
 function renderBackup(){
