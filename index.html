@@ -1,0 +1,1154 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Калькулятор позиции</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Позиция">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" id="themeColor" content="#eef1f5">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<script>
+/* тема до первой отрисовки, чтобы не мигало */
+(function(){ try{ var t=JSON.parse(localStorage.getItem('poscalc.theme')); if(t==='light'||t==='dark') document.documentElement.setAttribute('data-theme',t); }catch(e){} })();
+</script>
+<style>
+/* Layout: trading terminal — header with balance, sliding tabs (bottom bar on phones);
+   calculator = inputs left / readout right; diary = balance strip, equity curve, analytics, ledger, trade editor */
+:root{
+  --bg:#eef1f5; --panel:#ffffff; --panel-2:#f6f8fb; --ink:#121a24; --muted:#5d6a79; --line:#dbe1e8;
+  --accent:#2a4bf0; --accent-soft:#e7ecfe; --on-accent:#ffffff; --glow:rgba(42,75,240,.10);
+  --good:#0f8a5f; --good-soft:#e1f4ec; --warn:#b26a00; --warn-soft:#fdf1dc; --bad:#d13b45; --bad-soft:#fbe6e7;
+  --shadow:0 1px 2px rgba(18,26,36,.05), 0 8px 24px -12px rgba(18,26,36,.12);
+  --f-display:"Unbounded", "Arial Black", system-ui, sans-serif;
+  --f-body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ease:cubic-bezier(.2,.8,.2,1);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0a0e13; --panel:#111821; --panel-2:#0d131a; --ink:#e6ecf2; --muted:#8593a3; --line:#212b37;
+  --accent:#7b92ff; --accent-soft:#1a2347; --on-accent:#0a0e13; --glow:rgba(123,146,255,.12);
+  --good:#38cf8f; --good-soft:#0f2b23; --warn:#f0a73a; --warn-soft:#33260f; --bad:#ff6b74; --bad-soft:#36171b;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 30px -14px rgba(0,0,0,.6);
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0a0e13; --panel:#111821; --panel-2:#0d131a; --ink:#e6ecf2; --muted:#8593a3; --line:#212b37;
+  --accent:#7b92ff; --accent-soft:#1a2347; --on-accent:#0a0e13; --glow:rgba(123,146,255,.12);
+  --good:#38cf8f; --good-soft:#0f2b23; --warn:#f0a73a; --warn-soft:#33260f; --bad:#ff6b74; --bad-soft:#36171b;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 30px -14px rgba(0,0,0,.6);
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;background:var(--bg)}
+body{margin:0;color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  background:radial-gradient(1100px 520px at 85% -12%, var(--glow), transparent 62%), var(--bg);
+  background-attachment:fixed;min-height:100vh;
+  padding-inline:max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right));
+  padding-block:calc(18px + env(safe-area-inset-top)) calc(48px + env(safe-area-inset-bottom))}
+html.theming, html.theming *{transition:background-color .35s ease, border-color .35s ease, color .35s ease, fill .35s ease!important}
+[hidden]{display:none!important}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+
+/* header */
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 16px}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand svg{width:34px;height:34px;flex:none;border-radius:9px}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(18px,2.6vw,26px);letter-spacing:-.01em;margin:0;text-wrap:balance}
+.hright{display:flex;align-items:center;gap:10px}
+.balchip{display:flex;align-items:baseline;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 12px;box-shadow:var(--shadow)}
+.balchip span{font-size:12px;color:var(--muted)}
+.balchip b{font-family:var(--f-mono);font-size:17px;font-variant-numeric:tabular-nums}
+.balchip i{font-style:normal;font-family:var(--f-mono);font-size:12px}
+.iconbtn{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:0;cursor:pointer;box-shadow:var(--shadow)}
+.iconbtn svg{width:20px;height:20px}
+.iconbtn:hover{border-color:var(--accent)}
+
+/* tabs with sliding indicator */
+.tabs{position:relative;display:inline-grid;grid-template-columns:1fr 1fr;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px;width:max-content;max-width:100%;box-shadow:var(--shadow)}
+.tabs .ind{position:absolute;top:4px;bottom:4px;left:0;width:0;border-radius:8px;background:var(--accent);transition:transform .45s var(--ease), width .45s var(--ease)}
+.tabs button{position:relative;z-index:1;border:0;background:transparent;color:var(--muted);padding:9px 20px;border-radius:8px;font:600 14px var(--f-body);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:color .3s}
+.tabs button svg{width:18px;height:18px}
+.tabs button[aria-selected="true"]{color:var(--on-accent)}
+@media (max-width:640px){
+  .tabs{position:fixed;left:max(12px, env(safe-area-inset-left));right:max(12px, env(safe-area-inset-right));bottom:calc(10px + env(safe-area-inset-bottom));z-index:30;width:auto;display:grid;
+        background:color-mix(in srgb, var(--panel) 88%, transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .tabs button{padding:11px 10px;flex-direction:column;gap:2px;font-size:12px}
+  body{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+  .balchip span{display:none}
+}
+
+/* view enter animation */
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.view.enter .stag{animation:rise .55s var(--ease) both;animation-delay:calc(var(--i,0) * 55ms)}
+
+.grid{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:880px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;min-width:0;box-shadow:var(--shadow)}
+.panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600;margin:0 0 14px}
+.phead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
+.phead h2{margin:0}
+
+/* form */
+form{display:flex;flex-direction:column;gap:22px}
+fieldset{border:0;padding:0;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+fieldset legend{grid-column:1/-1;font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600;margin-bottom:10px;padding:0}
+.f{display:flex;flex-direction:column;gap:5px;min-width:0}
+.f.full{grid-column:1/-1}
+label,.lbl{font-size:13px;color:var(--muted)}
+.inp{position:relative}
+input,textarea,select{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:9px 11px;transition:border-color .2s, box-shadow .2s}
+input{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+input::placeholder,textarea::placeholder{color:var(--muted);opacity:.7}
+input[readonly]{color:var(--accent);background:var(--accent-soft);border-color:transparent}
+.inp input{padding-right:54px}
+.inp span{position:absolute;right:11px;top:50%;transform:translateY(-50%);font-family:var(--f-mono);font-size:12px;color:var(--muted);pointer-events:none}
+textarea{min-height:84px;resize:vertical;line-height:1.45}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input.err{border-color:var(--bad);box-shadow:0 0 0 3px var(--bad-soft)}
+.hint{font-size:12px;color:var(--muted)}
+.chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer}
+.chk input{width:auto;accent-color:var(--accent)}
+.lblrow{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.slider{display:flex;align-items:center;gap:10px;min-height:42px}
+.slider input[type=range]{flex:1;padding:0;border:0;background:transparent;accent-color:var(--accent);box-shadow:none}
+.slider output{font-family:var(--f-mono);font-weight:600;min-width:44px;text-align:right}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:3px;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:3px}
+.seg button{border:0;background:transparent;color:var(--muted);padding:7px 10px;border-radius:6px;font:600 13px var(--f-mono);cursor:pointer;transition:background .25s,color .25s}
+.seg button.on{background:var(--accent-soft);color:var(--accent)}
+.seg button.on.long{background:var(--good-soft);color:var(--good)}
+.seg button.on.short{background:var(--bad-soft);color:var(--bad)}
+
+/* verdict hero */
+.verdict{display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center}
+.ring{position:relative;width:96px;height:96px;flex:none}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring .trk{fill:none;stroke:var(--line);stroke-width:8}
+.ring .val{fill:none;stroke:var(--accent);stroke-width:8;stroke-linecap:round;transition:stroke-dashoffset .8s var(--ease), stroke .4s}
+.ring .num{position:absolute;inset:0;display:grid;place-items:center;text-align:center;line-height:1}
+.ring .num b{font-family:var(--f-display);font-size:26px;font-variant-numeric:tabular-nums}
+.ring .num small{display:block;font-size:10px;color:var(--muted);letter-spacing:.08em;margin-top:3px}
+.vbody{min-width:0;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.badge{font-family:var(--f-display);font-weight:700;font-size:clamp(16px,2.2vw,20px);padding:8px 14px;border-radius:9px;background:var(--accent-soft);color:var(--accent)}
+.verdict.good .badge{background:var(--good-soft);color:var(--good)}
+.verdict.warn .badge{background:var(--warn-soft);color:var(--warn)}
+.verdict.bad .badge{background:var(--bad-soft);color:var(--bad)}
+@keyframes pop{0%{transform:scale(.9);opacity:.4}60%{transform:scale(1.04)}100%{transform:scale(1);opacity:1}}
+.badge.pop{animation:pop .45s var(--ease)}
+.vbody p{margin:0}
+.vbody small{color:var(--muted)}
+@media (max-width:460px){.verdict{grid-template-columns:1fr}}
+
+/* stat tiles */
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+.stats.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:760px){.stats.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:620px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.stats>.stat:last-child:nth-child(odd){grid-column:1/-1}
+@media (min-width:621px){.stats:not(.four)>.stat:last-child:nth-child(odd){grid-column:auto}}
+.stat{background:var(--panel);padding:14px 16px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.stat .k{font-size:12px;color:var(--muted)}
+.stat .v{font-family:var(--f-mono);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;transition:color .3s}
+.stat .s{font-size:12px;color:var(--muted);font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.stat.hl{background:linear-gradient(180deg,var(--accent-soft),var(--panel))}
+.stat.hl .v{color:var(--accent)}
+.stat input{margin-top:2px;padding:4px 8px;font-size:17px;font-weight:600}
+.pos{color:var(--good)!important} .neg{color:var(--bad)!important}
+.dir{display:inline-block;font-family:var(--f-mono);font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px;transition:background .3s,color .3s}
+.dir.long{background:var(--good-soft);color:var(--good)} .dir.short{background:var(--bad-soft);color:var(--bad)}
+
+/* price ladder */
+.ladder{position:relative;height:78px;margin:4px 26px 6px}
+.ladder .track{position:absolute;left:0;right:0;top:24px;height:12px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line)}
+.ladder .zone{position:absolute;top:24px;height:12px;border-radius:3px;transition:left .6s var(--ease), width .6s var(--ease), opacity .3s}
+.ladder .zone.loss{background:linear-gradient(90deg,var(--bad),color-mix(in srgb,var(--bad) 55%,transparent))}
+.ladder .zone.gain{background:linear-gradient(90deg,color-mix(in srgb,var(--good) 55%,transparent),var(--good))}
+.ladder .mk{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;font:600 11px var(--f-mono);white-space:nowrap;transition:left .6s var(--ease), opacity .3s}
+.ladder .mk i{display:block;width:2px;height:44px;background:var(--ink);margin-top:2px;border-radius:1px}
+.ladder .mk b{position:absolute;top:62px;font-weight:400;color:var(--muted)}
+.ladder .mk#mE b{position:static;color:var(--ink);font-weight:600}
+.ladder .mk#mE{flex-direction:column}
+.ladder .mk#mE .nm{display:none}
+.ladder .mk.sl{color:var(--bad)} .ladder .mk.tp{color:var(--good)}
+
+.checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.checks li{display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:center;font-size:14px}
+.checks .ic{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;font-size:13px;font-weight:700;transition:background .3s,color .3s}
+.checks .ok .ic{background:var(--good-soft);color:var(--good)}
+.checks .mid .ic{background:var(--warn-soft);color:var(--warn)}
+.checks .no .ic{background:var(--bad-soft);color:var(--bad)}
+.checks .val{font-family:var(--f-mono);font-size:13px;color:var(--muted);white-space:nowrap}
+
+/* tables */
+.tbl{overflow-x:auto;margin-inline:-6px;padding-inline:6px}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th{font-size:12px;font-weight:600;text-align:right;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{font-family:var(--f-mono);text-align:right;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;transition:background .2s}
+th.l,td.l{text-align:left}
+tbody.click tr{cursor:pointer}
+tbody.click tr:hover td{background:var(--panel-2)}
+tr.rec td{background:var(--accent-soft)!important;font-weight:600}
+tr.rec td:first-child{color:var(--accent)}
+tr.sel td{background:var(--accent-soft)!important}
+td .sub{display:block;font-size:11px;color:var(--muted);font-family:var(--f-body)}
+@keyframes rowIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+tbody.anim tr{animation:rowIn .4s var(--ease) both;animation-delay:calc(min(var(--i,0),14) * 28ms)}
+.tag{font-family:var(--f-body);font-size:12px;padding:2px 8px;border-radius:5px;white-space:nowrap}
+.tag.ok{background:var(--good-soft);color:var(--good)} .tag.mid{background:var(--warn-soft);color:var(--warn)} .tag.no{background:var(--bad-soft);color:var(--bad)} .tag.info{background:var(--accent-soft);color:var(--accent)}
+.note{font-size:12px;color:var(--muted);margin:10px 0 0;max-width:80ch}
+
+/* buttons */
+.btns{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{font:inherit}
+.btn{font-weight:600;font-size:14px;border-radius:9px;padding:10px 16px;cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);transition:transform .15s, filter .2s, background .2s}
+.btn:hover{filter:brightness(1.08)}
+.btn:active{transform:scale(.97)}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.danger{background:transparent;color:var(--bad);border-color:var(--bad)}
+.btn.danger.arm{background:var(--bad);color:var(--on-accent)}
+.btn.sm{padding:7px 12px;font-size:13px}
+.link{border:0;background:none;color:var(--accent);padding:4px 6px;font-weight:600;font-size:13px;cursor:pointer}
+.x{border:0;background:none;color:var(--muted);padding:6px 8px;font-size:20px;line-height:1;cursor:pointer;border-radius:6px}
+.x:hover{color:var(--bad);background:var(--bad-soft)}
+.toast{font-size:13px;color:var(--good)}
+.toast.err{color:var(--bad)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.toast:not([hidden]){animation:fadeIn .3s var(--ease)}
+
+/* diary */
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.filters select,.filters input{width:auto;min-width:0;padding:7px 10px;font-size:14px}
+.filters input{width:130px}
+.backup{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px}
+.backup p{margin:0;font-size:14px;color:var(--muted);max-width:62ch}
+.backup p b{color:var(--ink);font-weight:600}
+.backup.stale{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.backup.stale p b{color:var(--warn)}
+#importFile{display:none}
+
+.eqwrap{position:relative}
+.eqwrap svg{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
+.eq-grid{stroke:var(--line);stroke-width:1}
+.eq-base{stroke:var(--muted);stroke-width:1;stroke-dasharray:4 5;opacity:.7}
+.eq-axis{font:11px var(--f-mono);fill:var(--muted)}
+.eq-line{fill:none;stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.eq-up .eq-line{stroke:var(--good)} .eq-down .eq-line{stroke:var(--bad)}
+.eq-up .eq-area{fill:url(#gUp)} .eq-down .eq-area{fill:url(#gDown)}
+.eq-up .eq-dot{fill:var(--good)} .eq-down .eq-dot{fill:var(--bad)}
+.eq-dot{stroke:var(--panel);stroke-width:2}
+.eq-hl{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
+.eq-hd{fill:var(--panel);stroke:var(--accent);stroke-width:2}
+.eqtip{position:absolute;top:0;transform:translateX(-50%);background:var(--ink);color:var(--bg);font:12px var(--f-mono);padding:6px 9px;border-radius:7px;pointer-events:none;white-space:nowrap;box-shadow:var(--shadow)}
+.eqtip b{display:block;font-size:13px}
+.empty{color:var(--muted);font-size:14px;margin:0;padding:18px 0}
+
+.ana{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 18px;margin-bottom:18px}
+@media (max-width:620px){.ana{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ana div{display:flex;flex-direction:column;min-width:0}
+.ana span{font-size:12px;color:var(--muted)}
+.ana b{font-family:var(--f-mono);font-size:16px;font-variant-numeric:tabular-nums}
+.bk{display:flex;flex-direction:column;gap:10px}
+.bkrow{display:grid;grid-template-columns:minmax(0,1.2fr) 60px 56px minmax(0,1.6fr) 96px;gap:10px;align-items:center;font-size:14px}
+.bkrow .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.bkrow .m{font-family:var(--f-mono);font-size:12px;color:var(--muted);text-align:right}
+.bkrow .v{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.bar{height:8px;border-radius:4px;background:var(--panel-2);overflow:hidden;position:relative}
+.bar i{position:absolute;top:0;bottom:0;left:0;width:0;border-radius:4px;transition:width .8s var(--ease)}
+.bar i.p{background:var(--good)} .bar i.n{background:var(--bad)}
+@media (max-width:520px){.bkrow{grid-template-columns:minmax(0,1fr) 50px 84px}.bkrow .bar,.bkrow .m.wr{display:none}}
+
+/* trade editor */
+@keyframes slideDown{from{opacity:0;transform:translateY(-10px) scale(.99)}to{opacity:1;transform:none}}
+.editor{border-color:var(--accent);display:flex;flex-direction:column;gap:18px;box-shadow:0 0 0 3px var(--accent-soft), var(--shadow)}
+.editor.opening{animation:slideDown .45s var(--ease)}
+.eg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.eg{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.legs{display:flex;flex-direction:column;gap:8px}
+.legs h3{font-size:13px;font-weight:600;margin:0;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.leg{display:grid;grid-template-columns:34px minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.1fr) minmax(0,1fr) 34px;gap:8px;align-items:center}
+@keyframes legIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.leg.new{animation:legIn .35s var(--ease)}
+.leg .n{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.leg .res{font-family:var(--f-mono);font-size:13px;text-align:right;white-space:nowrap}
+.leg input{padding:8px 9px}
+.leghead{font-size:11px;color:var(--muted)}
+@media (max-width:620px){
+  .leg{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px;row-gap:6px;padding-bottom:8px;border-bottom:1px dashed var(--line)}
+  .leg .n{display:none}
+  .leg .cp{grid-column:1;grid-row:1} .leg .cm{grid-column:2;grid-row:1} .leg .x,.leg .xs{grid-column:3;grid-row:1}
+  .leg .cd{grid-column:1;grid-row:2;font-size:14px;padding-inline:7px} .leg .res{grid-column:2 / 4;grid-row:2;text-align:right;align-self:center}
+  .leghead{display:none}
+}
+.sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+@media (max-width:620px){.sum{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sum div{background:var(--panel-2);padding:10px 12px;display:flex;flex-direction:column;min-width:0}
+.sum span{font-size:11px;color:var(--muted)}
+.sum b{font-family:var(--f-mono);font-size:15px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.progress{height:6px;border-radius:3px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .5s var(--ease), background .3s}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gUp" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--good)" stop-opacity=".28"/><stop offset="1" stop-color="var(--good)" stop-opacity="0"/></linearGradient>
+    <linearGradient id="gDown" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--bad)" stop-opacity=".28"/><stop offset="1" stop-color="var(--bad)" stop-opacity="0"/></linearGradient>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="var(--accent)"/><rect x="21" y="19" width="9" height="25" rx="2" fill="var(--on-accent)"/><rect x="24.5" y="12" width="2" height="40" rx="1" fill="var(--on-accent)"/><rect x="35" y="15" width="17" height="4" rx="2" fill="var(--good)"/><rect x="35" y="30" width="17" height="4" rx="2" fill="var(--on-accent)"/><rect x="35" y="45" width="17" height="4" rx="2" fill="var(--bad)"/></svg>
+      <h1>Калькулятор позиции</h1>
+    </div>
+    <div class="hright">
+      <div class="balchip" title="Текущий депозит по дневнику"><span>Депозит</span><b id="hdrBal">—</b><i id="hdrChg"></i></div>
+      <button class="iconbtn" id="themeBtn" type="button" aria-label="Тема"></button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" id="tabs">
+    <span class="ind" id="tabInd"></span>
+    <button role="tab" id="tab-calc" aria-selected="true" data-tab="calc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/></svg>Калькулятор</button>
+    <button role="tab" id="tab-diary" aria-selected="false" data-tab="diary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/></svg>Дневник</button>
+  </nav>
+
+  <!-- ============ CALCULATOR ============ -->
+  <section id="view-calc" class="view">
+    <div class="grid">
+      <form class="panel stag" style="--i:0" id="form" autocomplete="off" novalidate>
+        <fieldset>
+          <legend>Счёт и риск</legend>
+          <div class="f">
+            <div class="lblrow"><label for="dep">Депозит</label><label class="chk"><input type="checkbox" id="depSync" checked> из дневника</label></div>
+            <div class="inp"><input id="dep" inputmode="decimal" value="1000"><span>USDT</span></div>
+          </div>
+          <div class="f"><label for="risk">Риск на сделку</label><div class="inp"><input id="risk" inputmode="decimal" value="1"><span>%</span></div></div>
+          <div class="f"><label for="cap">Макс. маржа от депо</label><div class="inp"><input id="cap" inputmode="decimal" value="25"><span>%</span></div></div>
+          <div class="f"><label for="fee">Комиссия (тейкер)</label><div class="inp"><input id="fee" inputmode="decimal" value="0.05"><span>%</span></div></div>
+          <div class="f full"><label for="levs">Разрешённые плечи</label><input id="levs" value="1, 2, 3, 5, 10, 15, 20, 25, 50"><span class="hint">Через запятую. Выбирается наименьшее безопасное. Нажмите строку в таблице плеч, чтобы выбрать своё.</span></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Сделка</legend>
+          <div class="f"><label for="ticker">Монета</label><input id="ticker" value="BTCUSDT" list="coinList" autocapitalize="characters"></div>
+          <div class="f"><label for="cat">Категория</label><input id="cat" value="Свинг" list="catList"></div>
+          <div class="f"><label for="entry">Цена входа</label><input id="entry" inputmode="decimal" value="64200"></div>
+          <div class="f"><label for="stop">Стоп-лосс</label><input id="stop" inputmode="decimal" value="63300"></div>
+          <div class="f"><label for="tp">Тейк-профит</label><input id="tp" inputmode="decimal" value="66500"></div>
+          <div class="f"><label for="prob">Вероятность</label>
+            <div class="slider"><input type="range" id="prob" min="5" max="95" step="1" value="45"><output id="probOut">45%</output></div>
+          </div>
+          <div class="f full"><label for="comment">Почему вхожу в сделку</label>
+            <textarea id="comment">Пример: ретест пробитого уровня 64 000 на 4H, объём на пробое выше среднего, фандинг нейтральный. Стоп за локальный минимум.</textarea>
+          </div>
+        </fieldset>
+
+        <div class="btns">
+          <button type="submit" class="btn">Записать в дневник</button>
+          <button type="button" class="btn ghost" id="clear">Очистить сделку</button>
+        </div>
+      </form>
+
+      <div class="col">
+        <div class="panel verdict stag" style="--i:1" id="verdict">
+          <div class="ring" aria-label="Оценка мани-менеджмента">
+            <svg viewBox="0 0 100 100"><circle class="trk" cx="50" cy="50" r="42"/><circle class="val" id="ringVal" cx="50" cy="50" r="42" stroke-dasharray="263.9" stroke-dashoffset="263.9"/></svg>
+            <div class="num"><div><b id="score">—</b><small>ИЗ 100</small></div></div>
+          </div>
+          <div class="vbody">
+            <span class="badge" id="vBadge">—</span>
+            <p id="vText">Заполните поля слева.</p>
+            <small id="vSub"></small>
+          </div>
+        </div>
+
+        <div class="stats stag" style="--i:2" id="cStats">
+          <div class="stat"><span class="k">Направление</span><span class="v"><span class="dir long" id="c-dir">LONG</span></span><span class="s" id="c-dir-s"></span></div>
+          <div class="stat"><span class="k">До стопа</span><span class="v" id="c-stop">—</span><span class="s" id="c-stop-s"></span></div>
+          <div class="stat"><span class="k">Риск</span><span class="v neg" id="c-risk">—</span><span class="s" id="c-risk-s"></span></div>
+          <div class="stat"><span class="k">Объём позиции</span><span class="v" id="c-size">—</span><span class="s" id="c-size-s"></span></div>
+          <div class="stat"><span class="k">Плечо</span><span class="v" id="c-lev">—</span><span class="s" id="c-lev-s"></span></div>
+          <div class="stat hl"><span class="k">Сумма входа (маржа)</span><span class="v" id="c-margin">—</span><span class="s" id="c-margin-s"></span></div>
+          <div class="stat"><span class="k">До тейка</span><span class="v" id="c-tp">—</span><span class="s" id="c-tp-s"></span></div>
+          <div class="stat"><span class="k">Прибыль</span><span class="v pos" id="c-profit">—</span><span class="s">USDT после комиссий</span></div>
+          <div class="stat"><span class="k">Матожидание</span><span class="v" id="c-ev">—</span><span class="s" id="c-ev-s"></span></div>
+        </div>
+
+        <div class="panel stag" style="--i:3"><h2>Уровни</h2>
+          <div class="ladder" id="ladder">
+            <div class="track"></div><div class="zone loss" id="zLoss"></div><div class="zone gain" id="zGain"></div>
+            <div class="mk sl" id="mSL">SL<i></i><b></b></div><div class="mk" id="mE"><b></b><i></i></div><div class="mk tp" id="mTP">TP<i></i><b></b></div>
+          </div>
+        </div>
+
+        <div class="panel stag" style="--i:4"><h2>Мани-менеджмент</h2><ul class="checks" id="checks"></ul></div>
+
+        <div class="panel stag" style="--i:5">
+          <div class="phead"><h2>Подбор плеча</h2><button type="button" class="link" id="levAuto" hidden>Вернуть авто</button></div>
+          <div class="tbl"><table>
+            <thead><tr><th class="l">Плечо</th><th>Маржа, USDT</th><th>% депо</th><th>Ликвидация ≈</th><th>Статус</th></tr></thead>
+            <tbody id="levBody" class="click"></tbody>
+          </table></div>
+          <p class="note">Изолированная маржа. Ликвидация примерная: поддерживающая маржа 0,5%. Плечо не меняет риск в USDT, только сумму маржи и расстояние до ликвидации.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DIARY ============ -->
+  <section id="view-diary" class="view" hidden>
+    <div class="col">
+      <div class="stats four stag" style="--i:0">
+        <div class="stat"><label class="k" for="startDep">Стартовый депозит</label><input id="startDep" inputmode="decimal" value="1000"><span class="s">USDT</span></div>
+        <div class="stat hl"><span class="k">Текущий депозит</span><span class="v" id="d-bal">—</span><span class="s" id="d-bal-s"></span></div>
+        <div class="stat"><span class="k">Винрейт</span><span class="v" id="d-wr">—</span><span class="s" id="d-wr-s"></span></div>
+        <div class="stat"><span class="k">Профит-фактор</span><span class="v" id="d-pf">—</span><span class="s" id="d-pf-s"></span></div>
+        <div class="stat"><span class="k">Открытые позиции</span><span class="v" id="d-open">—</span><span class="s" id="d-open-s"></span></div>
+        <div class="stat"><span class="k">Прибыльные сделки</span><span class="v pos" id="d-win">—</span><span class="s">USDT</span></div>
+        <div class="stat"><span class="k">Убыточные сделки</span><span class="v neg" id="d-loss">—</span><span class="s">USDT</span></div>
+        <div class="stat"><span class="k">Комиссии</span><span class="v" id="d-fee">—</span><span class="s" id="d-fee-s">USDT</span></div>
+      </div>
+
+      <div class="panel editor" id="editor" hidden></div>
+
+      <div class="panel stag" style="--i:1">
+        <div class="phead"><h2>Кривая депозита</h2>
+          <div class="seg" id="eqRange"><button type="button" data-r="7">7Д</button><button type="button" data-r="30">30Д</button><button type="button" data-r="90">90Д</button><button type="button" data-r="all" class="on">Всё</button></div>
+        </div>
+        <div class="eqwrap" id="eqWrap"><div id="eqPlot"></div><div class="eqtip" id="eqTip" hidden></div></div>
+      </div>
+
+      <div class="panel stag" style="--i:2">
+        <div class="phead"><h2>Аналитика</h2>
+          <div class="seg" id="bkBy"><button type="button" data-b="category" class="on">Категории</button><button type="button" data-b="coin">Монеты</button></div>
+        </div>
+        <div class="ana">
+          <div><span>Макс. просадка</span><b id="a-dd">—</b></div>
+          <div><span>Средняя прибыль</span><b id="a-aw" class="pos">—</b></div>
+          <div><span>Средний убыток</span><b id="a-al" class="neg">—</b></div>
+          <div><span>Ожидание на сделку</span><b id="a-exp">—</b></div>
+          <div><span>Лучшая сделка</span><b id="a-best">—</b></div>
+          <div><span>Худшая сделка</span><b id="a-worst">—</b></div>
+        </div>
+        <div class="bk" id="bk"></div>
+      </div>
+
+      <div class="panel stag" style="--i:3">
+        <div class="phead">
+          <h2>Сделки</h2>
+          <div class="filters">
+            <select id="fStatus" aria-label="Статус"><option value="">Все</option><option value="open">Открытые</option><option value="closed">Закрытые</option></select>
+            <select id="fCat" aria-label="Категория"><option value="">Все категории</option></select>
+            <input id="fCoin" placeholder="Монета" aria-label="Поиск по монете">
+            <button type="button" class="btn sm" id="newTrade">+ Сделка</button>
+          </div>
+        </div>
+        <div class="tbl"><table>
+          <thead><tr><th class="l">Дата</th><th class="l">Монета</th><th class="l">Категория</th><th>Ср. вход</th><th>Плечо</th><th>Маржа</th><th>Закрыто</th><th>P&amp;L, USDT</th><th>Статус</th></tr></thead>
+          <tbody id="tradeBody" class="click"></tbody>
+        </table></div>
+        <p class="empty" id="tradeEmpty" hidden>Сделок пока нет. Рассчитайте вход в «Калькуляторе» и нажмите «Записать в дневник», или добавьте сделку кнопкой «+ Сделка».</p>
+      </div>
+
+      <div class="panel backup stag" style="--i:4" id="backup">
+        <p id="backupText">Сделки хранятся только на этом устройстве.</p>
+        <div class="btns">
+          <button type="button" class="btn" id="exportJson">Сохранить копию</button>
+          <button type="button" class="btn ghost" id="importBtn">Загрузить копию</button>
+          <button type="button" class="link" id="exportCsv">Выгрузить в Excel (CSV)</button>
+          <input type="file" id="importFile" accept=".json,application/json">
+          <span class="toast" id="backupMsg" hidden></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <datalist id="catList"><option value="Скальп"><option value="Интрадей"><option value="Свинг"><option value="Позиционная"><option value="Новости"></datalist>
+  <datalist id="coinList"></datalist>
+</div>
+
+<script>
+/* =================== helpers =================== */
+const $ = id => document.getElementById(id);
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const pnum = v => { const n = parseFloat(String(v ?? '').replace(/\s/g,'').replace(',', '.')); return isFinite(n) ? n : NaN; };
+const num = id => pnum($(id).value);
+const MMR = 0.005;
+const fmt = (v, d=2) => isFinite(v) ? v.toLocaleString('ru-RU',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
+const sgn = (v, d=2) => isFinite(v) ? (v>0?'+':v<0?'−':'')+fmt(Math.abs(v),d) : '—';
+const priceDec = p => !(p>0) ? 2 : p >= 1000 ? 1 : p >= 10 ? 2 : p >= 1 ? 4 : 6;
+const esc = s => String(s ?? '').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const isoDate = d => { const x=new Date(d); x.setMinutes(x.getMinutes()-x.getTimezoneOffset()); return x.toISOString().slice(0,10); };
+const today = () => isoDate(new Date());
+const ddmm = s => s ? s.split('-').reverse().join('.') : '—';
+const lsGet = (k,def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch(e) { return def; } };
+const lsSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e) { return false; } };
+const signCls = (el, v) => { el.classList.toggle('pos', v>0); el.classList.toggle('neg', v<0); };
+
+/* плавная смена чисел */
+function tween(el, to, f, dur=520){
+  if(!el) return;
+  const from = el._v; el._v = to;
+  cancelAnimationFrame(el._raf);
+  if(RM || !isFinite(to) || !isFinite(from) || Math.abs(from-to) < 1e-12){ el.textContent = f(to); return; }
+  const t0 = performance.now();
+  const step = now => { const k=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-k,3); el.textContent = f(from+(to-from)*e); if(k<1) el._raf=requestAnimationFrame(step); };
+  el._raf = requestAnimationFrame(step);
+}
+const setText = (id, t) => { const el=$(id); if(el && el.textContent!==t) el.textContent=t; };
+
+/* =================== trade math (pure) =================== */
+/* Позиция: объём каждой ноги = маржа × плечо; монет = объём / цена.
+   Средняя цена = Σобъём / Σмонет. Закрытие X% = X% от всех монет позиции.
+   Комиссия берётся с объёма каждой сделки: вход по цене входа, выход по цене выхода. */
+function tradeCalc(t){
+  const dir = t.side === 'short' ? -1 : 1;
+  const L = pnum(t.leverage) > 0 ? pnum(t.leverage) : 1;
+  const f = (pnum(t.fee) || 0) / 100;
+  const funding = pnum(t.funding) || 0;
+  let Q=0, notional=0, marginTot=0;
+  (t.entries||[]).forEach(e=>{ const p=pnum(e.price), m=pnum(e.margin); if(p>0 && m>0){ const n=m*L; notional+=n; Q+=n/p; marginTot+=m; } });
+  const avg = Q>0 ? notional/Q : NaN;
+  const entryFees = notional*f;
+  let closedPct=0, gross=0, exitFees=0;
+  const legs = (t.exits||[]).map(x=>{
+    const price=pnum(x.price), pct=pnum(x.pct);
+    if(!(price>0 && pct>0 && Q>0)) return {valid:false};
+    const q = Q*pct/100, g = q*(price-avg)*dir, fe = q*price*f;
+    closedPct+=pct; gross+=g; exitFees+=fe;
+    return {valid:true, q, gross:g, fee:fe, net:g-fe, date:x.date};
+  });
+  const fees = entryFees + exitFees;
+  const net = gross - fees + funding;
+  const status = Q===0 ? 'draft' : closedPct >= 99.99 ? 'closed' : closedPct > 0 ? 'partial' : 'open';
+  const stop = pnum(t.stop);
+  const stopOk = stop>0 && Q>0 && (dir>0 ? stop<avg : stop>avg);
+  const riskUsd = stopOk ? Q*Math.abs(avg-stop) + notional*f + Q*stop*f : NaN;
+  const R = riskUsd>0 ? net/riskUsd : NaN;
+  const exitDates = (t.exits||[]).map(x=>x.date).filter(Boolean).sort();
+  return {dir,L,Q,notional,marginTot,avg,entryFees,exitFees,fees,funding,gross,net,closedPct,legs,status,riskUsd,R,
+          roe: marginTot>0 ? net/marginTot*100 : NaN, over: closedPct>100.01, closeDate: exitDates[exitDates.length-1]||''};
+}
+/* История депозита: комиссия входа — в день входа, результат закрытия — в день закрытия, фандинг — в день последнего закрытия */
+function ledger(start, trades){
+  const ev=[];
+  trades.forEach(t=>{
+    const c=tradeCalc(t), f=(pnum(t.fee)||0)/100;
+    (t.entries||[]).forEach(e=>{ const m=pnum(e.margin), p=pnum(e.price); if(m>0&&p>0) ev.push({d:e.date||t.date||'', v:-m*c.L*f, k:0}); });
+    c.legs.forEach(l=>{ if(l.valid) ev.push({d:l.date||t.date||'', v:l.net, k:1}); });
+    if(c.funding) ev.push({d:c.closeDate||t.date||'', v:c.funding, k:2});
+  });
+  ev.sort((a,b)=> a.d<b.d?-1 : a.d>b.d?1 : a.k-b.k);
+  let bal=start; const pts=[{d:'',bal:start}];
+  ev.forEach(e=>{ bal+=e.v; pts.push({d:e.d,bal}); });
+  return {balance:bal, pts};
+}
+function maxDrawdown(pts){
+  let peak=-Infinity, dd=0, ddAbs=0;
+  pts.forEach(p=>{ if(p.bal>peak) peak=p.bal; if(peak>0){ const x=(peak-p.bal)/peak; if(x>dd){ dd=x; ddAbs=peak-p.bal; } } });
+  return {pct:dd*100, abs:ddAbs};
+}
+
+/* Калькулятор входа.
+   Убыток на стопе = объём × |вход−стоп|/вход + комиссия входа (объём × f) + комиссия выхода по цене стопа (объём × стоп/вход × f).
+   Объём = риск / (d + f × (1 + стоп/вход)). Прибыль на тейке считается так же, с ценой тейка. */
+function calcPosition(o){
+  const {D,r,cap,feePct,E,S:Sp,T,p,levs,pick} = o;
+  if(!(D>0&&r>0&&E>0&&Sp>0) || E===Sp) return {ok:false, msg: E===Sp && E>0 ? 'Стоп совпадает с ценой входа.' : 'Заполните депозит, риск, вход и стоп.'};
+  const f=(feePct||0)/100, long=Sp<E, d=Math.abs(E-Sp)/E;
+  const riskUsd=D*r/100, lossPerN=d+f*(1+Sp/E);
+  const notional=riskUsd/lossPerN, qty=notional/E;
+  const tpValid = T>0 && (long ? T>E : T<E);
+  const tpPct = tpValid ? Math.abs(T-E)/E : NaN;
+  const profitUsd = tpValid ? notional*(tpPct - f*(1+T/E)) : NaN;
+  const rr = tpValid ? profitUsd/riskUsd : NaN;
+  const ev = tpValid ? p*profitUsd - (1-p)*riskUsd : NaN;
+  const evR = tpValid ? p*rr - (1-p) : NaN;
+  const beWin = tpValid && rr>0 ? 1/(1+rr) : NaN;
+  const capUsd = D*(cap>0?cap:100)/100;
+  const rows = levs.map(L=>{
+    const margin=notional/L, liq = long ? E*(1-1/L+MMR) : E*(1+1/L-MMR);
+    const liqDist=Math.abs(E-liq)/E, liqSafe = long ? liq<Sp : liq>Sp, buffer=liqDist/d;
+    let st='ok'; if(!liqSafe || margin>D) st='no'; else if(margin>capUsd || buffer<1.5) st='mid';
+    return {L,margin,liq,liqSafe,buffer,st};
+  });
+  const rec = rows.find(x=>x.st==='ok') || null;
+  const picked = pick ? rows.find(x=>x.L===pick) : null;
+  const use = picked || rec;
+  return {ok:true,D,r,feePct,E,S:Sp,T,p,long,stopPct:d*100,riskUsd,notional,qty,tpValid,tpPct:tpPct*100,profitUsd,rr,ev,evR,beWin,rows,rec,use,manual:!!picked,capUsd,
+          feeStopPct:f*(1+Sp/E)*100};
+}
+
+/* =================== state =================== */
+const LOCAL_KEY='poscalc.diary.v2';
+const S = { tab:null, profile:{startDeposit:1000}, trades:[], deleted:{}, lastBackup:0, draft:null, delArm:false,
+            levPick:null, animRows:true, bk:'category', eqRange:'all' };
+function balance(){ return ledger(pnum(S.profile.startDeposit)||0, S.trades).balance; }
+
+/* =================== theme =================== */
+const THEME_ICONS = {
+  auto:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>',
+  light:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  dark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>'
+};
+const THEME_NAMES={auto:'Тема: как в системе', light:'Тема: светлая', dark:'Тема: тёмная'};
+let theme = lsGet('poscalc.theme','auto'); if(!THEME_ICONS[theme]) theme='auto';
+const mqDark = matchMedia('(prefers-color-scheme: dark)');
+function applyTheme(t, animate){
+  const root=document.documentElement;
+  if(animate && !RM){ root.classList.add('theming'); clearTimeout(applyTheme._t); applyTheme._t=setTimeout(()=>root.classList.remove('theming'),450); }
+  if(t==='auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme',t);
+  const btn=$('themeBtn'); btn.innerHTML=THEME_ICONS[t]; btn.title=THEME_NAMES[t]; btn.setAttribute('aria-label',THEME_NAMES[t]);
+  const dark = t==='dark' || (t==='auto' && mqDark.matches);
+  $('themeColor').setAttribute('content', dark ? '#0a0e13' : '#eef1f5');
+}
+$('themeBtn').addEventListener('click',()=>{ theme = theme==='auto' ? 'light' : theme==='light' ? 'dark' : 'auto'; lsSet('poscalc.theme',theme); applyTheme(theme,true); });
+if(mqDark.addEventListener) mqDark.addEventListener('change',()=>applyTheme(theme,true));
+applyTheme(theme,false);
+
+/* =================== tabs =================== */
+function moveInd(){
+  const b=document.querySelector('.tabs button[aria-selected="true"]'), ind=$('tabInd'); if(!b) return;
+  ind.style.width=b.offsetWidth+'px'; ind.style.transform=`translateX(${b.offsetLeft}px)`;
+}
+function setTab(t, first){
+  const changed = S.tab!==t;
+  S.tab=t;
+  document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected', String(b.dataset.tab===t)));
+  moveInd();
+  const v = t==='calc' ? $('view-calc') : $('view-diary');
+  $('view-calc').hidden = t!=='calc'; $('view-diary').hidden = t!=='diary';
+  if(changed){ v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter'); }
+  lsSet('poscalc.tab', t);
+  if(first) return;
+  if(t==='diary' && changed){ S.animRows=true; renderTrades(); renderBreakdown(); renderEquity({fromZero:true}); }
+  if(t==='calc' && changed) renderCalc();
+  window.scrollTo({top:0, behavior: RM?'auto':'smooth'});
+}
+document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
+window.addEventListener('resize',()=>{ moveInd(); clearTimeout(window._rz); window._rz=setTimeout(()=>{ if(S.tab==='diary') renderEquity({instant:true}); },150); });
+
+/* =================== calculator =================== */
+const CALC_KEYS=['risk','cap','fee','levs','depSync'];
+(function restoreCalc(){ const s=lsGet('poscalc.calc',null); if(!s) return;
+  CALC_KEYS.forEach(k=>{ if(s[k]===undefined) return; if(k==='depSync') $(k).checked=s[k]; else $(k).value=s[k]; });
+  if(!s.depSync && s.dep) $('dep').value=s.dep; })();
+function saveCalc(){ const o={}; CALC_KEYS.forEach(k=>o[k]= k==='depSync'? $(k).checked : $(k).value); o.dep=$('dep').value; lsSet('poscalc.calc',o); }
+
+function readCalc(){
+  const levs=[...new Set($('levs').value.split(/[,;\s]+/).map(Number).filter(x=>x>=1 && x<=500))].sort((a,b)=>a-b);
+  ['dep','risk','entry','stop'].forEach(id=>$(id).classList.toggle('err', $(id).value!=='' && !(num(id)>0)));
+  return {D:num('dep'), r:num('risk'), cap:num('cap'), feePct:num('fee')||0, E:num('entry'), S:num('stop'), T:num('tp'), p:num('prob')/100, levs, pick:S.levPick};
+}
+function scoreOf(c){
+  const items=[]; let pts=0, max=0;
+  const add=(w,st,label,val)=>{max+=w; pts+= st==='ok'?w: st==='mid'?w*0.5:0; items.push({st,label,val});};
+  add(25, c.r<=1?'ok':c.r<=2?'mid':'no', c.r<=1?'Риск на сделку в норме (до 1%)':c.r<=2?'Риск повышенный (1–2%)':'Риск больше 2% депозита', fmt(c.r,1)+'%');
+  if(c.tpValid){
+    add(25, c.rr>=2?'ok':c.rr>=1.5?'mid':'no', c.rr>=2?'Прибыль/риск от 1:2':c.rr>=1.5?'Прибыль/риск ниже 1:2':'Прибыль/риск ниже 1:1,5', '1:'+fmt(c.rr,2));
+    add(25, c.evR>=0.2?'ok':c.evR>0?'mid':'no', c.evR>0?'Матожидание положительное':'Матожидание отрицательное', sgn(c.ev)+' $');
+  } else { add(25,'no','Тейк-профит не задан или с неверной стороны','—'); add(25,'no','Матожидание не посчитать без тейка','—'); }
+  const u=c.use;
+  add(15, u && u.st==='ok' ? 'ok' : u && u.st==='mid' ? 'mid' : 'no',
+      !u ? 'Нет плеча, подходящего под лимит маржи' : u.st==='ok' ? 'Плечо с безопасной ликвидацией и маржой в лимите' : u.st==='mid' ? 'Выбранное плечо: маржа выше лимита или ликвидация близко' : 'Выбранное плечо: ликвидация раньше стопа', u?'x'+u.L:'—');
+  const cm=$('comment').value.trim().length;
+  add(10, cm>=40?'ok':cm>0?'mid':'no', cm>=40?'Причина входа записана':cm>0?'Причина входа слишком короткая':'Нет причины входа', cm+' симв.');
+  return {score:Math.round(pts/max*100), items};
+}
+let lastCalc=null;
+function setBadge(t){ const b=$('vBadge'); if(b.textContent===t) return; b.textContent=t; if(!RM){ b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); } }
+function renderCalc(){
+  if($('depSync').checked){ $('dep').value = balance().toFixed(2); $('dep').readOnly=true; } else $('dep').readOnly=false;
+  $('probOut').textContent=$('prob').value+'%';
+  const c=calcPosition(readCalc());
+  const v=$('verdict');
+  $('levAuto').hidden = !S.levPick;
+  if(!c.ok){
+    v.className='panel verdict stag'; setBadge('—'); $('vText').textContent=c.msg; $('vSub').textContent='';
+    $('ringVal').style.strokeDashoffset=263.9; $('score').textContent='—'; $('score')._v=NaN;
+    $('checks').innerHTML=''; $('levBody').innerHTML='';
+    ['c-stop','c-risk','c-size','c-lev','c-margin','c-tp','c-profit','c-ev'].forEach(id=>{ $(id).textContent='—'; $(id)._v=NaN; });
+    lastCalc=null; return;
+  }
+  const s=scoreOf(c), u=c.use;
+  const hardNo = !c.tpValid || !(c.evR>0) || c.rr<1 || c.r>3 || !u || u.st==='no';
+  let cls, badge, text;
+  if(hardNo || s.score<50){ cls='bad'; badge='Не входить'; } else if(s.score>=80){ cls='good'; badge='Можно входить'; } else { cls='warn'; badge='С осторожностью'; }
+  if(!c.tpValid) text='Укажите тейк-профит по направлению сделки, без него нельзя оценить сделку.';
+  else if(!(c.rr>0)) text='Тейк слишком близко: после комиссий прибыли не остаётся.';
+  else if(c.evR<=0) text=`При вероятности ${Math.round(c.p*100)}% и соотношении 1:${fmt(c.rr,2)} сделка в минус на дистанции. Нужно минимум ${fmt(c.beWin*100,0)}% отработок.`;
+  else if(u && u.st==='no') text=`С плечом x${u.L} ликвидация наступит раньше стопа. Выберите плечо меньше.`;
+  else if(!u) text='Ни одно разрешённое плечо не укладывается в лимит маржи. Уменьшите риск или поднимите лимит.';
+  else if(cls==='good') text=`Матожидание +${fmt(c.evR,2)}R на сделку. Вход ${fmt(u.margin,2)} USDT с плечом x${u.L}.`;
+  else text=`Матожидание ${sgn(c.evR)}R, но есть замечания ниже. Проверьте риск, тейк и плечо.`;
+  v.className='panel verdict stag '+cls; setBadge(badge); $('vText').textContent=text;
+  $('vSub').textContent=`Безубыточный винрейт ${isFinite(c.beWin)?fmt(c.beWin*100,0)+'%':'—'} · риск ${fmt(c.riskUsd,2)} USDT`;
+  const col=s.score>=80?'var(--good)':s.score>=50?'var(--warn)':'var(--bad)';
+  $('ringVal').style.stroke=col; $('ringVal').style.strokeDashoffset = 263.9*(1-s.score/100);
+  tween($('score'), s.score, x=>Math.round(x));
+
+  const dirEl=$('c-dir'); dirEl.textContent=c.long?'LONG':'SHORT'; dirEl.className='dir '+(c.long?'long':'short');
+  setText('c-dir-s', $('ticker').value.trim().toUpperCase());
+  tween($('c-stop'), c.stopPct, x=>fmt(x,2)+'%'); setText('c-stop-s', 'с комиссиями '+fmt(c.stopPct+c.feeStopPct,2)+'%');
+  tween($('c-risk'), c.riskUsd, x=>'−'+fmt(x,2)); setText('c-risk-s', 'USDT · '+fmt(c.r,2)+'% депо');
+  tween($('c-size'), c.notional, x=>fmt(x,2)); setText('c-size-s', 'USDT · '+fmt(c.qty, c.qty<1?5:3)+' монет');
+  $('c-lev').textContent = u ? 'x'+u.L : 'нет'; setText('c-lev-s', !u ? 'смотрите таблицу' : c.manual ? 'выбрано вручную' : 'наименьшее безопасное');
+  tween($('c-margin'), u?u.margin:NaN, x=>fmt(x,2)); setText('c-margin-s', u ? 'USDT · '+fmt(u.margin/c.D*100,1)+'% депо' : '');
+  tween($('c-tp'), c.tpValid?c.tpPct:NaN, x=>fmt(x,2)+'%'); setText('c-tp-s', c.tpValid?'соотношение 1:'+fmt(c.rr,2):'');
+  tween($('c-profit'), c.tpValid?c.profitUsd:NaN, x=>sgn(x));
+  tween($('c-ev'), c.tpValid?c.ev:NaN, x=>sgn(x)); signCls($('c-ev'), c.ev); setText('c-ev-s', c.tpValid?'USDT · '+sgn(c.evR)+'R':'');
+
+  const pd=priceDec(c.E), pts=[c.S,c.E]; if(c.tpValid) pts.push(c.T);
+  const lo=Math.min(...pts), hi=Math.max(...pts), pad=(hi-lo)*0.06||1;
+  const x=pr=>((pr-(lo-pad))/((hi+pad)-(lo-pad))*100);
+  const zl=$('zLoss'), zg=$('zGain');
+  zl.style.left=Math.min(x(c.S),x(c.E))+'%'; zl.style.width=Math.abs(x(c.E)-x(c.S))+'%';
+  zg.style.opacity=c.tpValid?1:0;
+  if(c.tpValid){ zg.style.left=Math.min(x(c.T),x(c.E))+'%'; zg.style.width=Math.abs(x(c.T)-x(c.E))+'%'; }
+  const mk=(id,pr,show=true)=>{ const m=$(id); m.style.opacity=show?1:0; if(show){ m.style.left=x(pr)+'%'; m.querySelector('b').textContent=(id==='mE'?'Вход · ':'')+fmt(pr,pd); } };
+  mk('mSL',c.S); mk('mE',c.E); mk('mTP',c.T,c.tpValid);
+
+  const icon={ok:'✓',mid:'!',no:'×'};
+  $('checks').innerHTML=s.items.map(i=>`<li class="${i.st}"><span class="ic">${icon[i.st]}</span><span>${i.label}</span><span class="val">${i.val}</span></li>`).join('');
+
+  $('levBody').innerHTML=c.rows.length?c.rows.map(r=>{
+    let t;
+    if(!r.liqSafe) t='<span class="tag no">ликвидация до стопа</span>';
+    else if(r.margin>c.D) t='<span class="tag no">маржа больше депо</span>';
+    else if(r.margin>c.capUsd) t='<span class="tag mid">маржа выше лимита</span>';
+    else if(r.buffer<1.5) t='<span class="tag mid">ликвидация близко</span>';
+    else t='<span class="tag ok">подходит</span>';
+    const isU=u&&r.L===u.L, isRec=c.rec&&r.L===c.rec.L;
+    return `<tr class="${isU?'rec':''}" data-lev="${r.L}" tabindex="0"><td class="l">x${r.L}${isU?(c.manual?' ← ваш выбор':' ← выбор'):isRec?' · авто':''}</td><td>${fmt(r.margin,2)}</td><td>${fmt(r.margin/c.D*100,1)}%</td><td>${fmt(r.liq,pd)}</td><td>${t}</td></tr>`;
+  }).join(''):`<tr><td class="l" colspan="5">Укажите разрешённые плечи.</td></tr>`;
+  lastCalc={c,s,badge,cls};
+}
+$('levBody').addEventListener('click',e=>{ const tr=e.target.closest('tr[data-lev]'); if(!tr) return; const L=+tr.dataset.lev; S.levPick = (lastCalc && lastCalc.c.rec && lastCalc.c.rec.L===L) ? null : L; renderCalc(); });
+$('levBody').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const tr=e.target.closest('tr[data-lev]'); if(tr) tr.click(); } });
+$('levAuto').addEventListener('click',()=>{ S.levPick=null; renderCalc(); });
+let calcSaveT;
+$('form').addEventListener('input',e=>{ if(e.target.id==='levs') S.levPick=null; renderCalc(); clearTimeout(calcSaveT); calcSaveT=setTimeout(saveCalc,300); });
+$('depSync').addEventListener('change',()=>{ renderCalc(); saveCalc(); });
+$('clear').addEventListener('click',()=>{ ['entry','stop','tp','comment'].forEach(id=>$(id).value=''); S.levPick=null; renderCalc(); $('entry').focus(); });
+$('form').addEventListener('submit',e=>{
+  e.preventDefault();
+  const L=lastCalc; if(!L){ $('entry').focus(); return; }
+  const c=L.c, u=c.use, lev = u ? u.L : (c.rows[0]?.L || 1);
+  S.draft = newTrade({
+    coin:$('ticker').value.trim().toUpperCase(), category:$('cat').value.trim(), side:c.long?'long':'short',
+    leverage:lev, fee:c.feePct, stop:String(c.S), tp:c.tpValid?String(c.T):'', prob:Math.round(c.p*100), comment:$('comment').value.trim(),
+    plan:{score:L.s.score, verdict:L.badge, riskPct:c.r, rr: isFinite(c.rr)?+c.rr.toFixed(2):null},
+    entries:[{price:String(c.E), margin:(c.notional/lev).toFixed(2), date:today()}],
+  });
+  S.delArm=false; setTab('diary'); renderEditor(true);
+  setTimeout(()=>$('editor').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}),60);
+});
+
+/* =================== diary =================== */
+function newTrade(o={}){
+  return Object.assign({id:null, coin:'', category:'', side:'long', date:today(), leverage:5, fee: num('fee')||0.05, stop:'', tp:'', funding:'', prob:null, comment:'', plan:null,
+    entries:[{price:'',margin:'',date:today()}], exits:[]}, o);
+}
+const STATUS = {draft:['Черновик','info'], open:['Открыта','info'], partial:['Частично','mid'], closed:['Закрыта','ok']};
+
+function renderDiaryStats(){
+  const start=pnum(S.profile.startDeposit)||0, L=ledger(start,S.trades), bal=L.balance, pnl=bal-start;
+  const calcs=S.trades.map(t=>({t,c:tradeCalc(t)}));
+  const closed=calcs.filter(x=>x.c.status==='closed');
+  const wins=closed.filter(x=>x.c.net>0), losses=closed.filter(x=>x.c.net<=0);
+  const sumW=wins.reduce((a,x)=>a+x.c.net,0), sumL=Math.abs(losses.reduce((a,x)=>a+x.c.net,0));
+  const pf = sumL>0 ? sumW/sumL : (sumW>0?Infinity:NaN);
+  const Rs=closed.map(x=>x.c.R).filter(isFinite), avgR=Rs.length?Rs.reduce((a,b)=>a+b,0)/Rs.length:NaN;
+  const openL=calcs.filter(x=>x.c.status==='open'||x.c.status==='partial');
+  const openMargin=openL.reduce((a,x)=>a+x.c.marginTot*(1-Math.min(x.c.closedPct,100)/100),0);
+  const fees=calcs.reduce((a,x)=>a+x.c.fees,0), funding=calcs.reduce((a,x)=>a+x.c.funding,0);
+
+  if(document.activeElement!==$('startDep')) $('startDep').value = S.profile.startDeposit;
+  tween($('d-bal'), bal, x=>fmt(x,2)); $('d-bal-s').textContent=`${sgn(pnl)} USDT · ${start>0?sgn(pnl/start*100,1)+'%':'—'}`; signCls($('d-bal-s'), pnl);
+  tween($('d-wr'), closed.length?wins.length/closed.length*100:NaN, x=>fmt(x,0)+'%'); $('d-wr-s').textContent=`${wins.length} из ${closed.length} закрытых`;
+  $('d-pf').textContent = pf===Infinity?'∞':fmt(pf,2); $('d-pf-s').textContent=`в среднем ${isFinite(avgR)?sgn(avgR)+'R':'—'} на сделку`;
+  tween($('d-open'), openL.length, x=>String(Math.round(x))); $('d-open-s').textContent=`в марже ${fmt(openMargin,2)} USDT`;
+  tween($('d-win'), sumW, x=>sgn(x));
+  tween($('d-loss'), sumL, x=>x>0.004?'−'+fmt(x,2):'0,00');
+  tween($('d-fee'), fees, x=>x>0.004?'−'+fmt(x,2):'0,00'); $('d-fee-s').textContent = funding ? `фандинг ${sgn(funding)} USDT` : 'USDT уплачено';
+
+  tween($('hdrBal'), bal, x=>fmt(x,2));
+  const hc=$('hdrChg'); hc.textContent = start>0 && Math.abs(pnl)>0.004 ? sgn(pnl/start*100,1)+'%' : ''; signCls(hc,pnl);
+
+  const dd=maxDrawdown(L.pts);
+  $('a-dd').textContent = dd.pct>0.0001 ? '−'+fmt(dd.pct,1)+'% · '+fmt(dd.abs,2) : '0%';
+  $('a-aw').textContent = wins.length ? '+'+fmt(sumW/wins.length,2) : '—';
+  $('a-al').textContent = losses.length ? '−'+fmt(sumL/losses.length,2) : '—';
+  const exp = closed.length ? (sumW-sumL)/closed.length : NaN;
+  $('a-exp').textContent = sgn(exp); signCls($('a-exp'), exp);
+  const nets=closed.map(x=>x.c.net), best=nets.length?Math.max(...nets):NaN, worst=nets.length?Math.min(...nets):NaN;
+  $('a-best').textContent = sgn(best); signCls($('a-best'), best||0);
+  $('a-worst').textContent = sgn(worst); signCls($('a-worst'), worst||0);
+}
+$('startDep').addEventListener('change', e=>{ const v=pnum(e.target.value); if(v>=0){ S.profile.startDeposit=v; S.profile.updatedAt=Date.now(); saveLocal(); renderAll({eq:'morph'}); } else e.target.value=S.profile.startDeposit; });
+
+/* ---------- breakdown ---------- */
+function renderBreakdown(){
+  const by=S.bk, g=new Map();
+  S.trades.forEach(t=>{ const c=tradeCalc(t); if(c.Q===0) return;
+    const k=(by==='coin'?t.coin:t.category)||(by==='coin'?'—':'Без категории');
+    const o=g.get(k)||{n:0,closed:0,wins:0,net:0}; o.n++; if(c.status==='closed'){ o.closed++; if(c.net>0) o.wins++; } o.net+=c.net; g.set(k,o); });
+  const rows=[...g.entries()].sort((a,b)=>b[1].net-a[1].net);
+  const box=$('bk');
+  if(!rows.length){ box.innerHTML='<p class="empty" style="padding:4px 0">Здесь будет результат по '+(by==='coin'?'монетам':'категориям')+'.</p>'; return; }
+  const mx=Math.max(...rows.map(r=>Math.abs(r[1].net)))||1;
+  box.innerHTML=rows.map(([k,o])=>`<div class="bkrow"><span class="nm">${esc(k)}</span><span class="m">${o.n} сд.</span><span class="m wr">${o.closed?fmt(o.wins/o.closed*100,0)+'%':'—'}</span><div class="bar"><i class="${o.net>=0?'p':'n'}" data-w="${Math.abs(o.net)/mx*100}"></i></div><span class="v ${o.net>0?'pos':o.net<0?'neg':''}">${sgn(o.net)}</span></div>`).join('');
+  requestAnimationFrame(()=>requestAnimationFrame(()=>box.querySelectorAll('.bar i').forEach(i=>i.style.width=i.dataset.w+'%')));
+}
+$('bkBy').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; S.bk=b.dataset.b; $('bkBy').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); renderBreakdown(); });
+
+/* ---------- equity chart ---------- */
+const EQ={N:96, ys:null, W:0, H:0, raf:0, cur:null};
+function eqData(){
+  const start=pnum(S.profile.startDeposit)||0;
+  let pts=ledger(start,S.trades).pts;
+  if(S.eqRange!=='all'){
+    const c=new Date(); c.setDate(c.getDate()-(+S.eqRange)); const cut=isoDate(c);
+    let base=start; const rest=[];
+    pts.forEach((p,i)=>{ if(i===0) return; if(p.d<cut) base=p.bal; else rest.push(p); });
+    pts=[{d:cut,bal:base},...rest];
+  }
+  return pts;
+}
+function renderEquity(opt={}){
+  const plot=$('eqPlot'), pts=eqData();
+  if(pts.length<2){ plot.innerHTML='<p class="empty">'+(S.trades.length?'За этот период движений депозита нет.':'Здесь появится кривая депозита после первых сделок.')+'</p>'; EQ.ys=null; EQ.W=0; $('eqTip').hidden=true; return; }
+  const W=Math.max(280, Math.round($('eqWrap').clientWidth||640)), H=W<520?190:240, pl=62, pr=14, pt=16, pb=28;
+  const vals=pts.map(p=>p.bal); let mn=Math.min(...vals), mx=Math.max(...vals);
+  if(mx-mn<1e-9){ mn-=Math.max(1,Math.abs(mn)*0.01); mx+=Math.max(1,Math.abs(mx)*0.01); }
+  const pv=(mx-mn)*0.12; mn-=pv; mx+=pv;
+  const X=i=>pl+(W-pl-pr)*i/(pts.length-1), Y=v=>pt+(H-pt-pb)*(1-(v-mn)/(mx-mn));
+  const N=EQ.N, xs=[], target=[];
+  for(let k=0;k<N;k++){ const t=k/(N-1)*(pts.length-1), i=Math.min(Math.floor(t),pts.length-2), fr=t-i; xs.push(pl+(W-pl-pr)*k/(N-1)); target.push(Y(vals[i]+(vals[i+1]-vals[i])*fr)); }
+  const up = vals[vals.length-1] >= vals[0];
+  const rebuild = EQ.W!==W || EQ.H!==H || !plot.querySelector('svg');
+  if(rebuild){
+    plot.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Кривая депозита">
+      <line class="eq-grid" id="eqG1"/><line class="eq-grid" id="eqG2"/><line class="eq-base" id="eqBase"/>
+      <path class="eq-area" id="eqArea"/><path class="eq-line" id="eqLine"/>
+      <circle class="eq-dot" id="eqDot" r="4.5"/>
+      <text class="eq-axis" id="eqT1" text-anchor="end"/><text class="eq-axis" id="eqT2" text-anchor="end"/><text class="eq-axis" id="eqTB" text-anchor="end"/>
+      <text class="eq-axis" id="eqD1"/><text class="eq-axis" id="eqD2" text-anchor="end"/>
+      <line class="eq-hl" id="eqHL" visibility="hidden"/><circle class="eq-hd" id="eqHD" r="5" visibility="hidden"/>
+      <rect id="eqHit" x="${pl}" y="0" width="${W-pl-pr}" height="${H}" fill="transparent"/>
+    </svg>`;
+    bindEqHover();
+  }
+  const svg=plot.querySelector('svg'); svg.setAttribute('class', up?'eq-up':'eq-down');
+  const gl=(id,y)=>{ const l=$(id); l.setAttribute('x1',pl); l.setAttribute('x2',W-pr); l.setAttribute('y1',y); l.setAttribute('y2',y); };
+  const vMax=Math.max(...vals), vMin=Math.min(...vals);
+  gl('eqG1',Y(vMax)); gl('eqG2',Y(vMin)); gl('eqBase',Y(vals[0]));
+  const tx=(id,x,y,s)=>{ const t=$(id); t.setAttribute('x',x); t.setAttribute('y',y); t.textContent=s; };
+  const fd = Math.abs(vMax)>=10000 ? 0 : Math.abs(vMax-vMin)<20 ? 2 : 0;
+  tx('eqT1',pl-8,Y(vMax)+4,fmt(vMax,fd)); tx('eqT2',pl-8,Y(vMin)+4, Math.abs(Y(vMax)-Y(vMin))>14?fmt(vMin,fd):'');
+  const showB = Math.abs(Y(vals[0])-Y(vMax))>14 && Math.abs(Y(vals[0])-Y(vMin))>14; tx('eqTB',pl-8,Y(vals[0])+4, showB?fmt(vals[0],fd):'');
+  const firstD=pts.find(p=>p.d)?.d;
+  tx('eqD1',pl,H-7,ddmm(firstD)); tx('eqD2',W-pr,H-7,ddmm(pts[pts.length-1].d));
+  EQ.cur={pts,X,Y,W,H};
+
+  const line=$('eqLine'), area=$('eqArea'), dot=$('eqDot');
+  const paint=ys=>{ let d='M'+xs[0].toFixed(1)+','+ys[0].toFixed(1); for(let k=1;k<N;k++) d+='L'+xs[k].toFixed(1)+','+ys[k].toFixed(1);
+    line.setAttribute('d',d); area.setAttribute('d',d+`L${xs[N-1].toFixed(1)},${H-pb}L${xs[0].toFixed(1)},${H-pb}Z`);
+    dot.setAttribute('cx',xs[N-1]); dot.setAttribute('cy',ys[N-1]); };
+  cancelAnimationFrame(EQ.raf);
+  EQ.W=W; EQ.H=H;
+  line.style.transition='none'; line.style.strokeDasharray=''; line.style.strokeDashoffset='';
+  area.style.transition='none'; area.style.opacity=1; dot.style.transition='none'; dot.style.opacity=1;
+  if(RM || opt.instant || (!opt.fromZero && (!EQ.ys || rebuild))){ EQ.ys=target; paint(target); return; }
+  if(opt.fromZero){
+    paint(target); EQ.ys=target;
+    const len=line.getTotalLength();
+    line.style.strokeDasharray=len; line.style.strokeDashoffset=len; area.style.opacity=0; dot.style.opacity=0;
+    void line.getBoundingClientRect();
+    line.style.transition='stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)'; line.style.strokeDashoffset=0;
+    area.style.transition='opacity .9s ease .3s'; area.style.opacity=1;
+    dot.style.transition='opacity .3s ease .95s'; dot.style.opacity=1;
+    clearTimeout(EQ.t); EQ.t=setTimeout(()=>{ line.style.transition='none'; line.style.strokeDasharray=''; },1200);
+    return;
+  }
+  const from=EQ.ys, t0=performance.now(), dur=650;
+  const step=now=>{ const k=Math.min(1,(now-t0)/dur), e=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2;
+    const cur=target.map((y,i)=>from[i]+(y-from[i])*e); paint(cur); EQ.ys=cur; if(k<1) EQ.raf=requestAnimationFrame(step); else EQ.ys=target; };
+  EQ.raf=requestAnimationFrame(step);
+}
+function bindEqHover(){
+  const hit=$('eqHit'), tip=$('eqTip');
+  const show=ev=>{
+    const c=EQ.cur; if(!c) return;
+    const r=hit.ownerSVGElement.getBoundingClientRect(), sx=(ev.clientX-r.left)*(c.W/r.width);
+    const n=c.pts.length, i=Math.max(0,Math.min(n-1,Math.round((sx-c.X(0))/(c.X(n-1)-c.X(0))*(n-1))));
+    const p=c.pts[i], x=c.X(i), y=c.Y(p.bal), prev=i>0?c.pts[i-1].bal:p.bal;
+    const hl=$('eqHL'), hd=$('eqHD');
+    hl.setAttribute('x1',x); hl.setAttribute('x2',x); hl.setAttribute('y1',14); hl.setAttribute('y2',c.H-28); hl.setAttribute('visibility','visible');
+    hd.setAttribute('cx',x); hd.setAttribute('cy',y); hd.setAttribute('visibility','visible');
+    tip.hidden=false; tip.innerHTML=`<b>${fmt(p.bal,2)}</b>${p.d?ddmm(p.d):'Старт'}${i>0?' · '+sgn(p.bal-prev):''}`;
+    const px=x/c.W*r.width; tip.style.left=Math.max(64,Math.min(r.width-64,px))+'px'; tip.style.top=Math.max(-8,(y/c.H*r.height)-52)+'px';
+  };
+  const hide=()=>{ tip.hidden=true; $('eqHL').setAttribute('visibility','hidden'); $('eqHD').setAttribute('visibility','hidden'); };
+  hit.addEventListener('pointermove',show); hit.addEventListener('pointerdown',show); hit.addEventListener('pointerleave',hide);
+}
+$('eqRange').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; S.eqRange=b.dataset.r; $('eqRange').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); $('eqTip').hidden=true; renderEquity(); });
+
+/* ---------- trades table ---------- */
+function renderTrades(){
+  const fs=$('fStatus').value, fc=$('fCat').value, fq=$('fCoin').value.trim().toUpperCase();
+  const cats=[...new Set(S.trades.map(t=>t.category).filter(Boolean))].sort();
+  $('fCat').innerHTML='<option value="">Все категории</option>'+cats.map(c=>`<option ${c===fc?'selected':''}>${esc(c)}</option>`).join('');
+  $('coinList').innerHTML=[...new Set(S.trades.map(t=>t.coin).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join('');
+  const rows=S.trades.map(t=>({t,c:tradeCalc(t)}))
+    .filter(({t,c})=>(!fs || (fs==='closed'? c.status==='closed' : c.status!=='closed')) && (!fc || t.category===fc) && (!fq || (t.coin||'').toUpperCase().includes(fq)))
+    .sort((a,b)=> (b.t.date||'').localeCompare(a.t.date||'') || (b.t.createdAt||0)-(a.t.createdAt||0));
+  $('tradeEmpty').hidden = S.trades.length>0;
+  const body=$('tradeBody');
+  body.classList.toggle('anim', S.animRows && !RM); S.animRows=false;
+  body.innerHTML = rows.length ? rows.map(({t,c},n)=>{
+    const st=STATUS[c.status], pd=priceDec(c.avg), sel=S.draft&&S.draft.id&&S.draft.id===t.id, adds=(t.entries||[]).length-1;
+    return `<tr data-id="${esc(t.id)}" class="${sel?'sel':''}" tabindex="0" style="--i:${n}">
+      <td class="l">${ddmm(t.date)}</td>
+      <td class="l"><span class="dir ${t.side==='short'?'short':'long'}">${t.side==='short'?'S':'L'}</span> ${esc(t.coin||'—')}</td>
+      <td class="l">${esc(t.category||'—')}</td>
+      <td>${fmt(c.avg,pd)}${adds>0?`<span class="sub">усреднений: ${adds}</span>`:''}</td>
+      <td>x${fmt(c.L,0)}</td>
+      <td>${fmt(c.marginTot,2)}</td>
+      <td>${fmt(Math.min(c.closedPct,100),0)}%</td>
+      <td class="${c.net>0?'pos':c.net<0?'neg':''}">${sgn(c.net)}<span class="sub">${isFinite(c.R)&&c.closedPct>0?sgn(c.R)+'R · ':''}${isFinite(c.roe)?sgn(c.roe,1)+'% ROE':''}</span></td>
+      <td><span class="tag ${st[1]}">${st[0]}</span></td></tr>`;
+  }).join('') : (S.trades.length?`<tr><td class="l" colspan="9">Нет сделок под этот фильтр.</td></tr>`:'');
+}
+['fStatus','fCat','fCoin'].forEach(id=>$(id).addEventListener('input',()=>{ S.animRows=true; renderTrades(); }));
+function openTrade(id){ const t=S.trades.find(x=>x.id===id); if(!t) return; S.draft=JSON.parse(JSON.stringify(t)); if(S.draft.funding==null) S.draft.funding=''; S.delArm=false; renderEditor(true); renderTrades(); $('editor').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}); }
+$('tradeBody').addEventListener('click',e=>{ const tr=e.target.closest('tr[data-id]'); if(tr) openTrade(tr.dataset.id); });
+$('tradeBody').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const tr=e.target.closest('tr[data-id]'); if(tr) openTrade(tr.dataset.id); } });
+$('newTrade').addEventListener('click',()=>{ S.draft=newTrade(); S.delArm=false; renderEditor(true); renderTrades(); $('editor').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}); setTimeout(()=>$('ed-coin')&&$('ed-coin').focus({preventScroll:true}),350); });
+
+/* =================== editor =================== */
+function renderEditor(opening){
+  const ed=$('editor'), d=S.draft;
+  if(!d){ ed.hidden=true; ed.innerHTML=''; return; }
+  ed.hidden=false;
+  if(opening && !RM){ ed.classList.remove('opening'); void ed.offsetWidth; ed.classList.add('opening'); }
+  const plan = d.plan ? `<span class="tag info">План: ${esc(d.plan.verdict)} · ММ ${d.plan.score}/100${d.plan.rr?` · 1:${fmt(d.plan.rr,2)}`:''}${d.prob?` · ${d.prob}%`:''}</span>` : '';
+  ed.innerHTML=`
+    <div class="phead" style="margin:0"><h2>${d.id?'Сделка':'Новая сделка'}</h2>${plan}</div>
+    <div class="eg">
+      <div class="f"><label for="ed-coin">Монета</label><input id="ed-coin" data-k="coin" list="coinList" value="${esc(d.coin)}" placeholder="ETHUSDT" autocapitalize="characters"></div>
+      <div class="f"><label for="ed-category">Категория</label><input id="ed-category" data-k="category" list="catList" value="${esc(d.category)}" placeholder="Свинг"></div>
+      <div class="f"><label for="ed-date">Дата открытия</label><input id="ed-date" type="date" data-k="date" value="${esc(d.date)}"></div>
+      <div class="f"><span class="lbl">Направление</span><div class="seg" id="ed-side">
+        <button type="button" data-side="long" class="${d.side!=='short'?'on long':''}">LONG</button><button type="button" data-side="short" class="${d.side==='short'?'on short':''}">SHORT</button></div></div>
+      <div class="f"><label for="ed-leverage">Плечо</label><div class="inp"><input id="ed-leverage" data-k="leverage" inputmode="decimal" value="${esc(d.leverage)}"><span>x</span></div></div>
+      <div class="f"><label for="ed-fee">Комиссия</label><div class="inp"><input id="ed-fee" data-k="fee" inputmode="decimal" value="${esc(d.fee)}"><span>%</span></div></div>
+      <div class="f"><label for="ed-stop">Стоп-лосс</label><input id="ed-stop" data-k="stop" inputmode="decimal" value="${esc(d.stop)}"></div>
+      <div class="f"><label for="ed-tp">Тейк-профит</label><input id="ed-tp" data-k="tp" inputmode="decimal" value="${esc(d.tp)}"></div>
+      <div class="f"><label for="ed-funding">Фандинг</label><div class="inp"><input id="ed-funding" data-k="funding" inputmode="decimal" value="${esc(d.funding)}" placeholder="0"><span>USDT</span></div><span class="hint">+ получили, − заплатили</span></div>
+    </div>
+
+    <div class="legs">
+      <h3>Входы и усреднения <button type="button" class="link" id="addEntry">+ Усреднение</button></h3>
+      <div class="leg leghead"><span></span><span>Цена</span><span>Маржа, USDT</span><span>Дата</span><span style="text-align:right">Монет</span><span></span></div>
+      <div id="entryRows"></div>
+    </div>
+
+    <div class="legs">
+      <h3>Закрытия <button type="button" class="link" id="addExit">+ Закрытие</button></h3>
+      <div class="leg leghead"><span></span><span>Цена закрытия</span><span>% позиции</span><span>Дата</span><span style="text-align:right">P&amp;L</span><span></span></div>
+      <div id="exitRows"></div>
+      <div class="progress" title="Закрыто от позиции"><i id="closedBar"></i></div>
+    </div>
+
+    <div class="sum" id="edSum"></div>
+
+    <div class="f"><label for="ed-comment">Почему вошёл, заметки по сделке</label><textarea id="ed-comment" data-k="comment">${esc(d.comment)}</textarea></div>
+
+    <div class="btns">
+      <button type="button" class="btn" id="edSave">${d.id?'Сохранить':'Добавить в дневник'}</button>
+      <button type="button" class="btn ghost" id="edCancel">Закрыть</button>
+      ${d.id?`<button type="button" class="btn danger ${S.delArm?'arm':''}" id="edDel">${S.delArm?'Точно удалить?':'Удалить'}</button>`:''}
+      <span class="toast" id="edMsg" hidden></span>
+    </div>`;
+  renderLegs(); renderEdSum();
+  ed.querySelectorAll('[data-k]').forEach(inp=>inp.addEventListener('input',()=>{ d[inp.dataset.k]=inp.value; renderEdSum(); }));
+  $('ed-side').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; d.side=b.dataset.side;
+    $('ed-side').querySelectorAll('button').forEach(x=>x.className= x.dataset.side===d.side ? 'on '+d.side : ''); renderEdSum(); });
+  $('addEntry').addEventListener('click',()=>{ d.entries.push({price:'',margin:'',date:today()}); renderLegs('entries'); renderEdSum(); $('en-'+(d.entries.length-1)+'-price').focus(); });
+  $('addExit').addEventListener('click',()=>{ const c=tradeCalc(d); const left=Math.max(0, Math.round((100-c.closedPct)*100)/100); d.exits.push({price:'',pct: left?String(left):'',date:today()}); renderLegs('exits'); renderEdSum(); $('ex-'+(d.exits.length-1)+'-price').focus(); });
+  $('edSave').addEventListener('click',saveDraft);
+  $('edCancel').addEventListener('click',()=>{ S.draft=null; S.delArm=false; renderEditor(); renderTrades(); });
+  if(d.id) $('edDel').addEventListener('click',()=>{ if(!S.delArm){ S.delArm=true; const b=$('edDel'); b.classList.add('arm'); b.textContent='Точно удалить?'; return; } deleteTrade(d.id); });
+}
+function renderLegs(added){
+  const d=S.draft;
+  $('entryRows').innerHTML=d.entries.map((e,i)=>`<div class="leg ${added==='entries'&&i===d.entries.length-1?'new':''}" style="margin-bottom:8px">
+    <span class="n">${i===0?'Вход':'+'+i}</span>
+    <input class="cp" id="en-${i}-price" data-leg="entries" data-i="${i}" data-f="price" inputmode="decimal" placeholder="Цена" aria-label="Цена входа ${i+1}" value="${esc(e.price)}">
+    <input class="cm" id="en-${i}-margin" data-leg="entries" data-i="${i}" data-f="margin" inputmode="decimal" placeholder="Маржа" aria-label="Маржа ${i+1}" value="${esc(e.margin)}">
+    <input class="cd" id="en-${i}-date" type="date" data-leg="entries" data-i="${i}" data-f="date" aria-label="Дата входа ${i+1}" value="${esc(e.date)}">
+    <span class="res" id="en-${i}-res"></span>
+    ${d.entries.length>1?`<button type="button" class="x" data-rm="entries" data-i="${i}" aria-label="Убрать вход">×</button>`:'<span class="xs"></span>'}
+  </div>`).join('');
+  $('exitRows').innerHTML=d.exits.length? d.exits.map((x,i)=>`<div class="leg ${added==='exits'&&i===d.exits.length-1?'new':''}" style="margin-bottom:8px">
+    <span class="n">${i+1}</span>
+    <input class="cp" id="ex-${i}-price" data-leg="exits" data-i="${i}" data-f="price" inputmode="decimal" placeholder="Цена" aria-label="Цена закрытия ${i+1}" value="${esc(x.price)}">
+    <div class="inp cm"><input id="ex-${i}-pct" data-leg="exits" data-i="${i}" data-f="pct" inputmode="decimal" placeholder="%" aria-label="Процент позиции ${i+1}" value="${esc(x.pct)}"><span>%</span></div>
+    <input class="cd" id="ex-${i}-date" type="date" data-leg="exits" data-i="${i}" data-f="date" aria-label="Дата закрытия ${i+1}" value="${esc(x.date)}">
+    <span class="res" id="ex-${i}-res"></span>
+    <button type="button" class="x" data-rm="exits" data-i="${i}" aria-label="Убрать закрытие">×</button>
+  </div>`).join('') : '<p class="hint" style="margin:0 0 8px">Позиция открыта. Добавьте закрытие, когда зафиксируете часть или всю позицию.</p>';
+  document.querySelectorAll('#entryRows [data-leg],#exitRows [data-leg]').forEach(inp=>inp.addEventListener('input',()=>{ d[inp.dataset.leg][+inp.dataset.i][inp.dataset.f]=inp.value; renderEdSum(); }));
+  document.querySelectorAll('#entryRows [data-rm],#exitRows [data-rm]').forEach(b=>b.addEventListener('click',()=>{ d[b.dataset.rm].splice(+b.dataset.i,1); renderLegs(); renderEdSum(); }));
+}
+function renderEdSum(){
+  const d=S.draft, c=tradeCalc(d), pd=priceDec(c.avg), start=pnum(S.profile.startDeposit)||0;
+  const balWithout=ledger(start,S.trades.filter(t=>t.id!==d.id)).balance;
+  d.entries.forEach((e,i)=>{ const m=pnum(e.margin), p=pnum(e.price), el=$('en-'+i+'-res'); if(el) el.textContent = m>0&&p>0 ? fmt(m*c.L/p, m*c.L/p<1?5:3) : ''; });
+  d.exits.forEach((x,i)=>{ const l=c.legs[i], el=$('ex-'+i+'-res'); if(!el) return; el.textContent = l&&l.valid ? sgn(l.net) : ''; el.className='res '+(l&&l.valid?(l.net>=0?'pos':'neg'):''); });
+  $('closedBar').style.width=Math.min(100,c.closedPct)+'%';
+  $('closedBar').style.background = c.over ? 'var(--bad)' : c.closedPct>=99.99 ? 'var(--good)' : 'var(--accent)';
+  const st=STATUS[c.status];
+  $('edSum').innerHTML=`
+    <div><span>Средняя цена входа</span><b>${fmt(c.avg,pd)}</b></div>
+    <div><span>Маржа / объём, USDT</span><b>${fmt(c.marginTot,2)} / ${fmt(c.notional,2)}</b></div>
+    <div><span>Закрыто</span><b class="${c.over?'neg':''}">${fmt(c.closedPct,1)}%${c.over?' (больше 100%)':''}</b></div>
+    <div><span>Статус</span><b>${st[0]}</b></div>
+    <div><span>P&amp;L до комиссий</span><b class="${c.gross>0?'pos':c.gross<0?'neg':''}">${sgn(c.gross)}</b></div>
+    <div><span>Комиссии${c.funding?' / фандинг':''}</span><b>−${fmt(c.fees,2)}${c.funding?' / '+sgn(c.funding):''}</b></div>
+    <div><span>Итог сделки</span><b class="${c.net>0?'pos':c.net<0?'neg':''}">${sgn(c.net)} USDT</b></div>
+    <div><span>ROE / в R</span><b>${sgn(c.roe,1)}% / ${isFinite(c.R)?sgn(c.R)+'R':'—'}</b></div>
+    <div><span>Депозит после сделки</span><b>${fmt(balWithout + c.net,2)}</b></div>
+    <div><span>Влияние на депозит</span><b class="${c.net>0?'pos':c.net<0?'neg':''}">${balWithout>0?sgn(c.net/balWithout*100,2)+'%':'—'}</b></div>
+    <div><span>Риск по стопу</span><b>${isFinite(c.riskUsd)?'−'+fmt(c.riskUsd,2):'—'}</b></div>
+    <div><span>Остаток позиции</span><b>${fmt(c.Q*(1-Math.min(c.closedPct,100)/100), c.Q<1?5:3)} монет</b></div>`;
+}
+function edMsg(t, err){ const m=$('edMsg'); if(!m) return; m.textContent=t; m.className='toast'+(err?' err':''); m.hidden=false; clearTimeout(edMsg._t); if(!err) edMsg._t=setTimeout(()=>{ if(m) m.hidden=true; },1800); }
+
+/* =================== persistence =================== */
+function cleanTrade(d){
+  const keep=['coin','category','side','date','leverage','fee','stop','tp','funding','prob','comment','plan'];
+  const o={}; keep.forEach(k=>o[k]= d[k]===undefined ? null : d[k]);
+  o.coin=String(o.coin||'').trim().toUpperCase(); o.category=String(o.category||'').trim();
+  o.entries=(d.entries||[]).filter(e=>pnum(e.price)>0||pnum(e.margin)>0).map(e=>({price:String(e.price),margin:String(e.margin),date:e.date||''}));
+  o.exits=(d.exits||[]).filter(x=>pnum(x.price)>0||pnum(x.pct)>0).map(x=>({price:String(x.price),pct:String(x.pct),date:x.date||''}));
+  o.createdAt = d.createdAt || Date.now(); o.updatedAt = Date.now();
+  return o;
+}
+function saveDraft(){
+  const d=S.draft, c=tradeCalc(d);
+  if(!String(d.coin||'').trim()){ edMsg('Укажите монету.',true); $('ed-coin').focus(); return; }
+  if(c.Q===0){ edMsg('Добавьте хотя бы один вход: цену и маржу.',true); return; }
+  if(c.over){ edMsg('Сумма закрытий больше 100% позиции.',true); return; }
+  if((d.exits||[]).some(x=>(pnum(x.price)>0) !== (pnum(x.pct)>0))){ edMsg('В каждом закрытии нужны и цена, и процент.',true); return; }
+  const body=cleanTrade(d);
+  if(!d.id) d.id='t'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  const rec=Object.assign({id:d.id},body), i=S.trades.findIndex(t=>t.id===d.id), backup=[...S.trades];
+  if(i>=0) S.trades[i]=rec; else S.trades.push(rec);
+  if(!saveLocal()){ S.trades=backup; edMsg('Не удалось сохранить: память браузера недоступна.',true); return; }
+  S.draft=JSON.parse(JSON.stringify(rec));
+  renderAll({eq:'morph'}); renderEditor(); edMsg('Сохранено');
+}
+function deleteTrade(id){
+  S.trades=S.trades.filter(t=>t.id!==id);
+  S.deleted=Object.assign({},S.deleted,{[id]:Date.now()});
+  saveLocal(); S.draft=null; S.delArm=false; renderEditor(); renderAll({eq:'morph'});
+}
+function saveLocal(){ return lsSet(LOCAL_KEY,{profile:S.profile,trades:S.trades,deleted:S.deleted||{},lastBackup:S.lastBackup||0}); }
+function loadLocal(){
+  const l=lsGet(LOCAL_KEY,null);
+  if(l){ S.profile=Object.assign({startDeposit:1000},l.profile); S.trades=Array.isArray(l.trades)?l.trades:[]; S.deleted=l.deleted||{}; S.lastBackup=l.lastBackup||0; }
+}
+
+/* =================== backup =================== */
+function stamp(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}`; }
+function backupMsg(t,err){ const m=$('backupMsg'); m.textContent=t; m.className='toast'+(err?' err':''); m.hidden=false; clearTimeout(backupMsg._t); backupMsg._t=setTimeout(()=>m.hidden=true, err?6000:3000); }
+async function offerFile(name, text, type){
+  const blob=new Blob([text],{type});
+  try{
+    const file=new File([blob],name,{type});
+    if(navigator.canShare && navigator.canShare({files:[file]}) && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)){
+      await navigator.share({files:[file], title:name}); return true;
+    }
+  }catch(e){ if(e && e.name==='AbortError') return false; }
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000); return true;
+}
+$('exportJson').addEventListener('click', async ()=>{
+  const data={app:'poscalc', version:2, exportedAt:new Date().toISOString(), profile:S.profile, trades:S.trades, deleted:S.deleted||{}};
+  const ok=await offerFile(`trades_${stamp()}.json`, JSON.stringify(data,null,1), 'application/json');
+  if(ok){ S.lastBackup=Date.now(); saveLocal(); renderBackup(); backupMsg('Копия сохранена'); }
+});
+$('exportCsv').addEventListener('click', ()=>{
+  const head=['Дата','Монета','Категория','Направление','Плечо','Комиссия %','Ср. вход','Маржа USDT','Объём USDT','Усреднений','Закрыто %','Дата закрытия','P&L до комиссий','Комиссии','Фандинг','Итог USDT','ROE %','R','Статус','Стоп','Тейк','Комментарий'];
+  const q=v=>{ const s=v==null?'':String(v); return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+  const n=(v,d=2)=>isFinite(v)?v.toFixed(d).replace('.',','):'';
+  const rows=[...S.trades].sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(t=>{ const c=tradeCalc(t);
+    return [t.date,t.coin,t.category,t.side==='short'?'SHORT':'LONG',c.L,t.fee,n(c.avg,6),n(c.marginTot),n(c.notional),Math.max(0,(t.entries||[]).length-1),n(c.closedPct,1),c.closeDate,n(c.gross),n(c.fees),n(c.funding),n(c.net),n(c.roe,1),n(c.R),STATUS[c.status][0],t.stop,t.tp,t.comment].map(q).join(';'); });
+  offerFile(`trades_${stamp()}.csv`, '﻿'+[head.join(';'),...rows].join('\r\n'), 'text/csv');
+});
+$('importBtn').addEventListener('click',()=>$('importFile').click());
+$('importFile').addEventListener('change', async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  let data; try{ data=JSON.parse(await f.text()); }catch(err){ backupMsg('Файл не читается. Выберите файл копии .json из этого приложения.',true); return; }
+  if(!data || data.app!=='poscalc' || !Array.isArray(data.trades)){ backupMsg('Это не файл копии калькулятора.',true); return; }
+  const r=mergeBackup(data); saveLocal(); S.animRows=true; renderAll({eq:'morph'}); renderEditor();
+  backupMsg(`Готово: добавлено ${r.added}, обновлено ${r.updated}, удалено ${r.removed}.`);
+});
+function mergeBackup(data){
+  const res={added:0,updated:0,removed:0};
+  S.deleted=Object.assign({}, S.deleted||{});
+  Object.entries(data.deleted||{}).forEach(([id,ts])=>{ if(!(S.deleted[id]>=ts)) S.deleted[id]=ts; });
+  const byId=new Map(S.trades.map(t=>[t.id,t]));
+  data.trades.forEach(t=>{
+    if(!t || !t.id) return;
+    if(S.deleted[t.id] && S.deleted[t.id] >= (t.updatedAt||0)) return;
+    const cur=byId.get(t.id);
+    if(!cur){ byId.set(t.id,t); res.added++; }
+    else if((t.updatedAt||0) > (cur.updatedAt||0)){ byId.set(t.id,t); res.updated++; }
+  });
+  for(const [id,t] of byId){ if(S.deleted[id] && S.deleted[id] >= (t.updatedAt||0)){ byId.delete(id); res.removed++; } }
+  S.trades=[...byId.values()];
+  if(data.profile && (data.profile.updatedAt||0) > (S.profile.updatedAt||0)) S.profile=Object.assign({startDeposit:1000}, data.profile);
+  return res;
+}
+function renderBackup(){
+  const el=$('backup'), n=S.trades.length;
+  const days = S.lastBackup ? Math.floor((Date.now()-S.lastBackup)/86400000) : null;
+  const when = S.lastBackup ? new Date(S.lastBackup).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : null;
+  el.classList.toggle('stale', n>0 && (days===null || days>=7));
+  $('backupText').innerHTML = `Сделки хранятся только на этом устройстве. ` + (when ? `Последняя копия: <b>${when}</b>.${days>=7?' Пора сохранить новую.':''}` : n ? `<b>Копий ещё не было.</b> Сохраните копию, чтобы не потерять сделки и перенести их на другое устройство.` : `Чтобы перенести сделки с другого устройства, загрузите файл копии.`);
+}
+
+/* =================== render all / boot =================== */
+function renderAll(o={}){
+  renderDiaryStats(); renderTrades(); renderBackup();
+  if(S.tab==='diary'){ renderBreakdown(); renderEquity(o.eq==='morph'?{}:{instant:true}); }
+  renderCalc();
+}
+loadLocal();
+setTab(location.hash==='#diary' ? 'diary' : (lsGet('poscalc.tab','calc')==='diary'?'diary':'calc'), true);
+renderAll();
+if(S.tab==='diary'){ S.animRows=true; renderTrades(); renderBreakdown(); renderEquity({fromZero:true}); }
+if(document.fonts) document.fonts.ready.then(moveInd);
+try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
+if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
