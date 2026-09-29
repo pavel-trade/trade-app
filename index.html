@@ -392,6 +392,27 @@ button{font:inherit}
 .sync-note{font-size:13px;color:var(--muted)}
 .migrate{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;background:var(--accent-soft);color:var(--ink);font-size:14px;width:100%}
 
+/* ---- несколько тейков ---- */
+.mtoggle{font-size:14px!important;color:var(--ink)!important;min-height:30px}
+.tprows{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2)}
+.tprows:not([hidden]){animation:fadeIn .35s var(--ease)}
+.tprow{display:grid;grid-template-columns:40px minmax(0,1.4fr) minmax(0,1fr);gap:8px;align-items:center}
+.tprow input{padding:8px 10px}
+.tphead{font-size:11px;color:var(--muted)}
+.tpn{font:600 12px var(--f-mono);color:var(--good)}
+.tpfoot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;align-items:center;margin-top:2px}
+.tpfoot .chk{font-size:13px;color:var(--ink)}
+.tpplan{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}
+.tpplan .tag{font-family:var(--f-mono)}
+/* ---- пополнения ---- */
+.cashbox{background:var(--panel);box-shadow:var(--shadow)}
+.cashform{display:grid;grid-template-columns:auto minmax(0,1fr) auto minmax(0,1.3fr) auto;gap:10px;align-items:center}
+@media (max-width:760px){.cashform{grid-template-columns:1fr 1fr}.cashform .seg,.cashform #cashNote{grid-column:1/-1}}
+.cashlist{display:flex;flex-direction:column;gap:6px}
+.crow{display:grid;grid-template-columns:90px minmax(0,1fr) auto 34px;gap:10px;align-items:center;padding:8px 10px;border-radius:9px;background:var(--panel-2);font-size:14px}
+.crow .cd{font:12px var(--f-mono);color:var(--muted)} .crow .cn{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .crow .ca{font:600 14px var(--f-mono)}
+@keyframes rowPop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+.crow.new{animation:rowPop .35s var(--ease)}
 /* ---- режим рынка ---- */
 .modeseg{margin-bottom:-4px}
 .modeseg button{font-family:var(--f-body);padding:9px 10px}
@@ -696,9 +717,17 @@ table.cmp .sh{display:none}
           <div class="f"><label for="cat">Категория</label><input id="cat" value="Свинг" list="catList"></div>
           <div class="f"><label for="entry">Цена входа</label><input id="entry" inputmode="decimal" value="64200"></div>
           <div class="f"><label for="stop">Стоп-лосс</label><input id="stop" inputmode="decimal" value="63300"></div>
-          <div class="f"><label for="tp">Тейк-профит</label><input id="tp" inputmode="decimal" value="66500"></div>
+          <div class="f" id="tpWrap"><label for="tp">Тейк-профит</label><input id="tp" inputmode="decimal" value="66500"></div>
           <div class="f"><label for="prob">Вероятность</label>
             <div class="slider"><input type="range" id="prob" min="5" max="95" step="1" value="45"><output id="probOut">45%</output></div>
+          </div>
+          <div class="f full"><label class="chk mtoggle"><input type="checkbox" id="multiTp"> Несколько тейков и безубыток</label></div>
+          <div class="f full tprows" id="tpRows" hidden>
+            <div class="tprow tphead"><span></span><span>Цена</span><span>Доля позиции</span></div>
+            <div class="tprow"><span class="tpn">TP1</span><input id="tp1" inputmode="decimal" placeholder="Цена" aria-label="Цена TP1" value="65500"><div class="inp"><input id="tp1p" inputmode="decimal" value="50" aria-label="Доля TP1"><span>%</span></div></div>
+            <div class="tprow"><span class="tpn">TP2</span><input id="tp2" inputmode="decimal" placeholder="Цена" aria-label="Цена TP2" value="66500"><div class="inp"><input id="tp2p" inputmode="decimal" value="30" aria-label="Доля TP2"><span>%</span></div></div>
+            <div class="tprow"><span class="tpn">TP3</span><input id="tp3" inputmode="decimal" placeholder="Цена" aria-label="Цена TP3" value="68000"><div class="inp"><input id="tp3p" inputmode="decimal" value="20" aria-label="Доля TP3"><span>%</span></div></div>
+            <div class="tpfoot"><label class="chk"><input type="checkbox" id="beAfter" checked> Стоп в безубыток после TP1</label><span class="hint" id="tpSumHint"></span></div>
           </div>
           <div class="f full"><label for="comment">Почему вхожу в сделку</label>
             <textarea id="comment">Пример: ретест пробитого уровня 64 000 на 4H, объём на пробое выше среднего, фандинг нейтральный. Стоп за локальный минимум.</textarea>
@@ -739,7 +768,7 @@ table.cmp .sh{display:none}
         <div class="panel stag" style="--i:3"><h2>Уровни</h2>
           <div class="ladder" id="ladder">
             <div class="track"></div><div class="zone loss" id="zLoss"></div><div class="zone gain" id="zGain"></div>
-            <div class="mk sl" id="mSL">SL<i></i><b></b></div><div class="mk" id="mE"><b></b><i></i></div><div class="mk tp" id="mTP">TP<i></i><b></b></div>
+            <div class="mk sl" id="mSL">SL<i></i><b></b></div><div class="mk" id="mE"><b></b><i></i></div><div class="mk tp" id="mTP">TP<i></i><b></b></div><div class="mk tp" id="mTP2" style="opacity:0">TP2<i></i><b></b></div><div class="mk tp" id="mTP3" style="opacity:0">TP3<i></i><b></b></div>
           </div>
         </div>
 
@@ -765,6 +794,21 @@ table.cmp .sh{display:none}
         <div class="stat hl"><span class="k">Текущий депозит</span><span class="v" id="d-bal">—</span><span class="s" id="d-bal-s"></span></div>
         <div class="stat"><span class="k">Открытые позиции</span><span class="v" id="d-open">—</span><span class="s" id="d-open-s"></span></div>
       </div>
+
+      <details class="review cashbox stag" style="--i:1" id="cashBox">
+        <summary>Пополнения и выводы <span class="hint" id="cashSum">не влияют на доходность</span></summary>
+        <div class="rv">
+          <div class="cashform">
+            <div class="seg" id="cashType"><button type="button" data-t="in" class="on">Пополнение</button><button type="button" data-t="out">Вывод</button></div>
+            <div class="inp"><input id="cashAmt" inputmode="decimal" placeholder="Сумма" aria-label="Сумма"><span>USDT</span></div>
+            <input id="cashDate" type="date" aria-label="Дата">
+            <input id="cashNote" placeholder="Комментарий (необязательно)" aria-label="Комментарий">
+            <button type="button" class="btn sm" id="cashAdd">Добавить</button>
+          </div>
+          <span class="toast" id="cashMsg" hidden></span>
+          <div class="cashlist" id="cashList"></div>
+        </div>
+      </details>
 
       <div class="panel editor" id="editor" hidden></div>
 
@@ -1007,8 +1051,10 @@ function tradeCalc(t){
           roe: marginTot>0 ? net/marginTot*100 : NaN, over: closedPct>100.01, closeDate: exitDates[exitDates.length-1]||''};
 }
 /* История депозита: комиссия входа — в день входа, результат закрытия — в день закрытия, фандинг — в день последнего закрытия */
-function ledger(start, trades){
+function cashList(){ try{ return (S && S.profile && Array.isArray(S.profile.cash)) ? S.profile.cash : []; }catch(e){ return []; } }
+function ledger(start, trades, cash){
   const ev=[];
+  (cash || cashList()).forEach(m=>{ const a=pnum(m.amount); if(isFinite(a) && a!==0) ev.push({d:m.date||'', v:a, k:-1, cash:a, note:m.note||''}); });
   trades.forEach(t=>{
     const c=tradeCalc(t), f=(pnum(t.fee)||0)/100;
     (t.entries||[]).forEach(e=>{ const m=pnum(e.margin), p=pnum(e.price); if(m>0&&p>0) ev.push({d:e.date||t.date||'', v:-m*c.L*f, k:0}); });
@@ -1017,12 +1063,13 @@ function ledger(start, trades){
   });
   ev.sort((a,b)=> a.d<b.d?-1 : a.d>b.d?1 : a.k-b.k);
   let bal=start; const pts=[{d:'',bal:start}];
-  ev.forEach(e=>{ bal+=e.v; pts.push({d:e.d,bal}); });
-  return {balance:bal, pts, ev};
+  let netCash=0;
+  ev.forEach(e=>{ bal+=e.v; if(e.cash) netCash+=e.cash; pts.push(e.cash ? {d:e.d,bal,cash:e.cash} : {d:e.d,bal}); });
+  return {balance:bal, pts, ev, netCash, trading: bal-start-netCash};
 }
 function maxDrawdown(pts){
   let peak=-Infinity, dd=0, ddAbs=0;
-  pts.forEach(p=>{ if(p.bal>peak) peak=p.bal; if(peak>0){ const x=(peak-p.bal)/peak; if(x>dd){ dd=x; ddAbs=peak-p.bal; } } });
+  pts.forEach(p=>{ if(p.cash && isFinite(peak)) peak+=p.cash; if(p.bal>peak) peak=p.bal; if(peak>0){ const x=(peak-p.bal)/peak; if(x>dd){ dd=x; ddAbs=peak-p.bal; } } });
   return {pct:dd*100, abs:ddAbs};
 }
 
@@ -1098,6 +1145,33 @@ function calcForex(o){
           tpValid,tpPct:tpValid?Math.abs(T-E)/E*100:NaN,profitUsd,rr,ev,evR,beWin,rows,rec,use:picked||rec,manual:!!picked,capUsd,feeStopPct:0};
 }
 
+/* Несколько тейков: прибыль = сумма по каждому тейку своей доли позиции (с комиссиями входа и выхода этой доли).
+   Безубыток после TP1: TP1 закрывает свою долю, остаток выходит по цене входа (минус комиссии остатка). */
+function tpLegProfit(c, T, w){
+  if(c.fx){ const q=c.qty*w, inv=c.conv==='inv'; return (inv ? q*Math.abs(T-c.E)/T : q*Math.abs(T-c.E)) - c.comm*w; }
+  const f=(c.feePct||0)/100; return c.notional*w*(Math.abs(T-c.E)/c.E - f*(1+T/c.E));
+}
+function applyTps(c, o){
+  if(!c.ok || !o.tps) return c;
+  const tps=o.tps.slice().sort((a,b)=>Math.abs(a.T-c.E)-Math.abs(b.T-c.E)), wsum=tps.reduce((a,x)=>a+x.w,0);
+  const dirOk = tps.length>0 && tps.every(x=> c.long ? x.T>c.E : x.T<c.E);
+  c.multi=true; c.tps=tps; c.be=!!o.be; c.wsum=wsum;
+  if(!tps.length){ c.tpValid=false; c.tpErr='Укажите цены тейков.'; }
+  else if(!dirOk){ c.tpValid=false; c.tpErr='Все тейки должны быть по направлению сделки.'; }
+  else if(Math.abs(wsum-1)>0.001){ c.tpValid=false; c.tpErr=`Сумма долей тейков должна быть 100% (сейчас ${fmt(wsum*100,0)}%).`; }
+  else c.tpValid=true;
+  if(!c.tpValid){ ['profitUsd','rr','ev','evR','beWin','tpPct','tpPips','beProfit'].forEach(k=>c[k]=NaN); return c; }
+  c.legsP=tps.map(x=>tpLegProfit(c,x.T,x.w));
+  c.profitUsd=c.legsP.reduce((a,b)=>a+b,0);
+  c.tpPct=tps.reduce((a,x)=>a+x.w*Math.abs(x.T-c.E)/c.E*100,0);
+  if(c.fx) c.tpPips=tps.reduce((a,x)=>a+x.w*Math.abs(x.T-c.E)/c.pip,0);
+  const rest=1-tps[0].w, beCost = c.fx ? c.comm*rest : c.notional*rest*2*((c.feePct||0)/100);
+  c.beProfit = c.legsP[0] - beCost;
+  c.rr=c.profitUsd/c.riskUsd; c.ev=c.p*c.profitUsd-(1-c.p)*c.riskUsd; c.evR=c.p*c.rr-(1-c.p); c.beWin=c.rr>0?1/(1+c.rr):NaN;
+  c.T=tps[tps.length-1].T;
+  return c;
+}
+
 /* =================== state =================== */
 let LOCAL_KEY='poscalc.diary.v2';
 const LEGACY_KEY='poscalc.diary.v2';
@@ -1153,12 +1227,12 @@ document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',
 window.addEventListener('resize',()=>{ moveInd(); clearTimeout(window._rz); window._rz=setTimeout(()=>{ if(S.tab==='stats') renderEquity({instant:true}); },150); });
 
 /* =================== calculator =================== */
-const CALC_KEYS=['risk','cap','fee','levs','depSync','fxInst','fxContract','fxPip','fxComm'];
+const CALC_KEYS=['risk','cap','fee','levs','depSync','fxInst','fxContract','fxPip','fxComm','multiTp','tp1p','tp2p','tp3p','beAfter'];
 let MODE = lsGet('poscalc.mode','crypto')==='fx' ? 'fx' : 'crypto';
 (function restoreCalc(){ const s=lsGet('poscalc.calc',null); if(!s) return;
-  CALC_KEYS.forEach(k=>{ if(s[k]===undefined) return; if(k==='depSync') $(k).checked=s[k]; else $(k).value=s[k]; });
+  CALC_KEYS.forEach(k=>{ if(s[k]===undefined) return; if($(k).type==='checkbox') $(k).checked=s[k]; else $(k).value=s[k]; });
   if(!s.depSync && s.dep) $('dep').value=s.dep; })();
-function saveCalc(){ const o={}; CALC_KEYS.forEach(k=>o[k]= k==='depSync'? $(k).checked : $(k).value); o.dep=$('dep').value; lsSet('poscalc.calc',o); }
+function saveCalc(){ const o={}; CALC_KEYS.forEach(k=>o[k]= $(k).type==='checkbox'? $(k).checked : $(k).value); o.dep=$('dep').value; lsSet('poscalc.calc',o); }
 
 function fxParams(){
   const pr=FX_PRESETS[$('fxInst').value]||FX_PRESETS.usdq, custom=$('fxInst').value==='custom';
@@ -1178,6 +1252,9 @@ function readCalc(){
   const levs=[...new Set($('levs').value.split(/[,;\s]+/).map(Number).filter(x=>x>=1 && x<=500))].sort((a,b)=>a-b);
   ['dep','risk','entry','stop'].forEach(id=>$(id).classList.toggle('err', $(id).value!=='' && !(num(id)>0)));
   const o={D:num('dep'), r:num('risk'), cap:num('cap'), feePct:num('fee')||0, E:num('entry'), S:num('stop'), T:num('tp'), p:num('prob')/100, levs, pick:S.levPick};
+  const multi=$('multiTp').checked; $('tpRows').hidden=!multi; $('tpWrap').hidden=multi;
+  if(multi){ o.tps=[1,2,3].map(i=>({T:num('tp'+i), w:(num('tp'+i+'p')||0)/100})).filter(x=>x.T>0 && x.w>0); o.be=$('beAfter').checked;
+    const far=o.tps.slice().sort((a,b)=>Math.abs(b.T-o.E)-Math.abs(a.T-o.E))[0]; o.T = far ? far.T : NaN; }
   return MODE==='fx' ? Object.assign(o, fxParams()) : o;
 }
 function scoreOf(c0){
@@ -1202,7 +1279,7 @@ function setBadge(t){ const b=$('vBadge'); if(b.textContent===t) return; b.textC
 function renderCalc(){
   if($('depSync').checked){ $('dep').value = balance().toFixed(2); $('dep').readOnly=true; } else $('dep').readOnly=false;
   $('probOut').textContent=$('prob').value+'%';
-  const c = MODE==='fx' ? calcForex(readCalc()) : calcPosition(readCalc());
+  const inp=readCalc(); const c = applyTps(MODE==='fx' ? calcForex(inp) : calcPosition(inp), inp);
   const v=$('verdict');
   $('levAuto').hidden = !S.levPick;
   if(!c.ok){
@@ -1217,11 +1294,13 @@ function renderCalc(){
   const hardNo = !c.tpValid || !(c.evR>0) || rr2<1 || r2>3 || !u || u.st==='no' || (c.fx && c.tooSmall && c.r>2);
   let cls, badge, text;
   if(hardNo || s.score<50){ cls='bad'; badge='Не входить'; } else if(s.score>=80){ cls='good'; badge='Можно входить'; } else { cls='warn'; badge='С осторожностью'; }
-  if(!c.tpValid) text='Укажите тейк-профит по направлению сделки, без него нельзя оценить сделку.';
+  if(c.tpErr) text=c.tpErr;
+  else if(!c.tpValid) text='Укажите тейк-профит по направлению сделки, без него нельзя оценить сделку.';
   else if(!(c.rr>0)) text='Тейк слишком близко: после комиссий прибыли не остаётся.';
   else if(c.evR<=0) text=`При вероятности ${Math.round(c.p*100)}% и соотношении 1:${fmt(c.rr,2)} сделка в минус на дистанции. Нужно минимум ${fmt(c.beWin*100,0)}% отработок.`;
   else if(u && u.st==='no') text=`С плечом x${u.L} ликвидация наступит раньше стопа. Выберите плечо меньше.`;
   else if(!u) text='Ни одно разрешённое плечо не укладывается в лимит маржи. Уменьшите риск или поднимите лимит.';
+  else if(cls==='good' && c.multi && c.be && isFinite(c.beProfit)) text = `Матожидание +${fmt(c.evR,2)}R. Если после TP1 выбьет в безубыток, сделка всё равно даст ${sgn(c.beProfit)} ${c.fx?'USD':'USDT'}.`;
   else if(cls==='good') text = c.fx ? `Матожидание +${fmt(c.evR,2)}R на сделку. Объём ${fmt(c.lots,2)} лота, маржа ${fmt(u.margin,2)} USD при плече x${u.L}.` : `Матожидание +${fmt(c.evR,2)}R на сделку. Вход ${fmt(u.margin,2)} USDT с плечом x${u.L}.`;
   else text=`Матожидание ${sgn(c.evR)}R, но есть замечания ниже. Проверьте риск, тейк и плечо.`;
   v.className='panel verdict stag '+cls; setBadge(badge); $('vText').textContent=text;
@@ -1234,26 +1313,30 @@ function renderCalc(){
   setText('c-dir-s', $('ticker').value.trim().toUpperCase());
   if(c.fx){ tween($('c-stop'), c.pipsStop, x=>fmt(x,1)+' п.'); setText('c-stop-s', fmt(c.stopPct,2)+'% · $'+fmt(c.pipValLot,2)+' за пункт/лот'); }
   else { tween($('c-stop'), c.stopPct, x=>fmt(x,2)+'%'); setText('c-stop-s', 'с комиссиями '+fmt(c.stopPct+c.feeStopPct,2)+'%'); }
-  const CUR=c.fx?'USD':'USDT'; $('c-profit-s').textContent=CUR+' после комиссий';
+  const CUR=c.fx?'USD':'USDT'; $('c-profit-s').textContent = c.multi && c.be && isFinite(c.beProfit) ? `все тейки · БУ: ${sgn(c.beProfit)}` : c.multi ? CUR+' · все тейки' : CUR+' после комиссий';
+  if(c.multi) $('tpSumHint').textContent = `Сумма долей: ${fmt(c.wsum*100,0)}%`; 
   tween($('c-risk'), c.riskUsd, x=>'−'+fmt(x,2)); setText('c-risk-s', CUR+' · '+fmt(c.r,2)+'% депо');
   if(c.fx){ tween($('c-size'), c.lots, x=>fmt(x,2)+' лота'); setText('c-size-s', fmt(c.qty,0)+' ед. · $'+fmt(c.notional,0)+(c.tooSmall?' · мин. лот':'')); }
   else { tween($('c-size'), c.notional, x=>fmt(x,2)); setText('c-size-s', 'USDT · '+fmt(c.qty, c.qty<1?5:3)+' монет'); }
   $('c-lev').textContent = u ? 'x'+u.L : 'нет'; setText('c-lev-s', !u ? 'смотрите таблицу' : c.manual ? 'выбрано вручную' : c.fx ? 'наименьшее в лимите маржи' : 'наименьшее безопасное');
   tween($('c-margin'), u?u.margin:NaN, x=>fmt(x,2)); setText('c-margin-s', u ? CUR+' · '+fmt(u.margin/c.D*100,1)+'% депо' : '');
   if(c.fx) tween($('c-tp'), c.tpValid?c.tpPips:NaN, x=>fmt(x,1)+' п.'); else tween($('c-tp'), c.tpValid?c.tpPct:NaN, x=>fmt(x,2)+'%');
-  setText('c-tp-s', c.tpValid?'соотношение 1:'+fmt(c.rr,2):'');
+  setText('c-tp-s', c.tpValid?(c.multi?`${c.tps.length} ${plural(c.tps.length,'тейк','тейка','тейков')}, в среднем · 1:`:'соотношение 1:')+fmt(c.rr,2):'');
   tween($('c-profit'), c.tpValid?c.profitUsd:NaN, x=>sgn(x));
   tween($('c-ev'), c.tpValid?c.ev:NaN, x=>sgn(x)); signCls($('c-ev'), c.ev); setText('c-ev-s', c.tpValid?CUR+' · '+sgn(c.evR)+'R':'');
 
-  const pd=priceDec(c.E), pts=[c.S,c.E]; if(c.tpValid) pts.push(c.T);
+  const pd=priceDec(c.E), pts=[c.S,c.E]; if(c.tpValid) pts.push(c.T); if(c.multi && c.tpValid) c.tps.forEach(x=>pts.push(x.T));
   const lo=Math.min(...pts), hi=Math.max(...pts), pad=(hi-lo)*0.06||1;
   const x=pr=>((pr-(lo-pad))/((hi+pad)-(lo-pad))*100);
   const zl=$('zLoss'), zg=$('zGain');
+  $('ladder').classList.toggle('multi', !!(c.multi && c.tpValid));
   zl.style.left=Math.min(x(c.S),x(c.E))+'%'; zl.style.width=Math.abs(x(c.E)-x(c.S))+'%';
   zg.style.opacity=c.tpValid?1:0;
   if(c.tpValid){ zg.style.left=Math.min(x(c.T),x(c.E))+'%'; zg.style.width=Math.abs(x(c.T)-x(c.E))+'%'; }
   const mk=(id,pr,show=true)=>{ const m=$(id); m.style.opacity=show?1:0; if(show){ m.style.left=x(pr)+'%'; m.querySelector('b').textContent=(id==='mE'?'Вход · ':'')+fmt(pr,pd); } };
-  mk('mSL',c.S); mk('mE',c.E); mk('mTP',c.T,c.tpValid);
+  mk('mSL',c.S); mk('mE',c.E);
+  if(c.multi && c.tpValid){ ['mTP','mTP2','mTP3'].forEach((id,i)=>{ const x=c.tps[i]; mk(id, x?x.T:c.E, !!x); $(id).firstChild.textContent = 'TP'+(i+1)+(x?' · '+fmt(x.w*100,0)+'%':''); }); }
+  else { mk('mTP',c.T,c.tpValid); $('mTP').firstChild.textContent='TP'; mk('mTP2',c.E,false); mk('mTP3',c.E,false); }
 
   const icon={ok:'✓',mid:'!',no:'×'};
   $('checks').innerHTML=s.items.map(i=>`<li class="${i.st}"><span class="ic">${icon[i.st]}</span><span>${i.label}</span><span class="val">${i.val}</span></li>`).join('');
@@ -1290,6 +1373,7 @@ $('form').addEventListener('submit',e=>{
   const c=L.c, u=c.use, lev = u ? u.L : (c.rows[0]?.L || 1);
   S.draft = Object.assign(newTrade({
     coin:$('ticker').value.trim().toUpperCase(), category:$('cat').value.trim(), side:c.long?'long':'short',
+    tps: c.multi && c.tpValid ? c.tps.map(x=>({price:String(x.T), pct:String(Math.round(x.w*10000)/100)})) : null, be: c.multi ? c.be : null,
     leverage:lev, fee:c.feePct, stop:String(c.S), tp:c.tpValid?String(c.T):'', prob:Math.round(c.p*100), comment:$('comment').value.trim(),
     plan:{score:L.s.score, verdict:L.badge, riskPct:c.r, rr: isFinite(c.rr)?+c.rr.toFixed(2):null},
     entries:[{price:String(c.E), margin:(c.notional/lev).toFixed(2), date:today()}],
@@ -1306,7 +1390,7 @@ function newTrade(o={}){
 const STATUS = {draft:['Черновик','info'], open:['Открыта','info'], partial:['Частично','mid'], closed:['Закрыта','ok']};
 
 function renderDiaryStats(){
-  const start=pnum(S.profile.startDeposit)||0, L=ledger(start,S.trades), bal=L.balance, pnl=bal-start;
+  const start=pnum(S.profile.startDeposit)||0, L=ledger(start,S.trades), bal=L.balance, pnl=L.trading, base=start+Math.max(0,L.netCash);
   const calcs=S.trades.map(t=>({t,c:tradeCalc(t)}));
   const closed=calcs.filter(x=>x.c.status==='closed');
   const wins=closed.filter(x=>x.c.net>0), losses=closed.filter(x=>x.c.net<=0);
@@ -1318,7 +1402,7 @@ function renderDiaryStats(){
   const fees=calcs.reduce((a,x)=>a+x.c.fees,0), funding=calcs.reduce((a,x)=>a+x.c.funding,0);
 
   if(document.activeElement!==$('startDep')) $('startDep').value = S.profile.startDeposit;
-  tween($('d-bal'), bal, x=>fmt(x,2)); $('d-bal-s').textContent=`${sgn(pnl)} USDT · ${start>0?sgn(pnl/start*100,1)+'%':'—'}`; signCls($('d-bal-s'), pnl);
+  tween($('d-bal'), bal, x=>fmt(x,2)); $('d-bal-s').textContent=`торговля ${sgn(pnl)} · ${base>0?sgn(pnl/base*100,1)+'%':'—'}${L.netCash?` · ${L.netCash>0?'пополнения':'выводы'} ${sgn(L.netCash,0)}`:''}`; signCls($('d-bal-s'), pnl);
   tween($('d-cnt'), closed.length, x=>String(Math.round(x))); $('d-cnt-s').textContent=`всего записей: ${S.trades.length}`;
   tween($('d-wr'), closed.length?wins.length/closed.length*100:NaN, x=>fmt(x,0)+'%'); $('d-wr-s').textContent=`${wins.length} из ${closed.length} закрытых`;
   $('d-pf').textContent = pf===Infinity?'∞':fmt(pf,2); $('d-pf-s').textContent=`в среднем ${isFinite(avgR)?sgn(avgR)+'R':'—'} на сделку`;
@@ -1328,7 +1412,8 @@ function renderDiaryStats(){
   tween($('d-fee'), fees, x=>x>0.004?'−'+fmt(x,2):'0,00'); $('d-fee-s').textContent = funding ? `фандинг ${sgn(funding)} USDT` : 'USDT уплачено';
 
   tween($('hdrBal'), bal, x=>fmt(x,2));
-  const hc=$('hdrChg'); hc.textContent = start>0 && Math.abs(pnl)>0.004 ? sgn(pnl/start*100,1)+'%' : ''; signCls(hc,pnl);
+  const hc=$('hdrChg'); hc.textContent = base>0 && Math.abs(pnl)>0.004 ? sgn(pnl/base*100,1)+'%' : ''; signCls(hc,pnl);
+  renderCash();
 
   const dd=maxDrawdown(L.pts);
   $('a-dd').textContent = dd.pct>0.0001 ? '−'+fmt(dd.pct,1)+'% · '+fmt(dd.abs,2) : '0%';
@@ -1441,7 +1526,7 @@ function bindEqHover(){
     const hl=$('eqHL'), hd=$('eqHD');
     hl.setAttribute('x1',x); hl.setAttribute('x2',x); hl.setAttribute('y1',14); hl.setAttribute('y2',c.H-28); hl.setAttribute('visibility','visible');
     hd.setAttribute('cx',x); hd.setAttribute('cy',y); hd.setAttribute('visibility','visible');
-    tip.hidden=false; tip.innerHTML=`<b>${fmt(p.bal,2)}</b>${p.d?ddmm(p.d):'Старт'}${i>0?' · '+sgn(p.bal-prev):''}`;
+    tip.hidden=false; tip.innerHTML=`<b>${fmt(p.bal,2)}</b>${p.d?ddmm(p.d):'Старт'}${i>0?' · '+(p.cash?(p.cash>0?'пополнение ':'вывод ')+sgn(p.cash):sgn(p.bal-prev)):''}`;
     const px=x/c.W*r.width; tip.style.left=Math.max(64,Math.min(r.width-64,px))+'px'; tip.style.top=Math.max(-8,(y/c.H*r.height)-52)+'px';
   };
   const hide=()=>{ tip.hidden=true; $('eqHL').setAttribute('visibility','hidden'); $('eqHD').setAttribute('visibility','hidden'); };
@@ -1629,7 +1714,7 @@ $('sliceBy').addEventListener('click',e=>{ const b=e.target.closest('button'); i
 $('awards').addEventListener('click',e=>{ const b=e.target.closest('[data-open]'); if(!b) return; setTab('diary'); openTrade(b.dataset.open); });
 function dailyPnl(){
   const L=ledger(pnum(S.profile.startDeposit)||0, S.trades), m=new Map();
-  (L.ev||[]).forEach(e=>{ if(!e.d) return; m.set(e.d,(m.get(e.d)||0)+e.v); });
+  (L.ev||[]).forEach(e=>{ if(!e.d || e.cash) return; m.set(e.d,(m.get(e.d)||0)+e.v); });
   return m;
 }
 function renderCalendar(){
@@ -1658,12 +1743,14 @@ const MONTHS_G=['янв','фев','мар','апр','мая','июн','июл','
 function periodStats(from,to){
   const start=pnum(S.profile.startDeposit)||0, L=ledger(start,S.trades);
   let bal0=start; L.pts.forEach((p,i)=>{ if(i>0 && p.d && p.d<from) bal0=p.bal; });
-  const pts=[{d:from,bal:bal0}].concat(L.pts.filter((p,i)=>i>0 && (!from || p.d>=from) && (!to || p.d<to)));
-  const pnl=pts[pts.length-1].bal-bal0;
+  const inR=d=>(!from || d>=from) && (!to || d<to);
+  let run=bal0, dep=0; const pts=[{d:from,bal:bal0}];
+  L.ev.forEach(e=>{ if(!inR(e.d)) return; if(e.cash){ if(e.cash>0) dep+=e.cash; return; } run+=e.v; pts.push({d:e.d,bal:run}); });
+  const pnl=run-bal0;
   const cs=S.trades.map(t=>({t,c:tradeCalc(t)})).filter(x=>x.c.status==='closed' && (!from || x.c.closeDate>=from) && (!to || x.c.closeDate<to));
   const w=cs.filter(x=>x.c.net>0), l=cs.filter(x=>x.c.net<=0), sw=w.reduce((a,x)=>a+x.c.net,0), sl=Math.abs(l.reduce((a,x)=>a+x.c.net,0));
   const Rs=cs.map(x=>x.c.R).filter(isFinite), best=cs.slice().sort((a,b)=>b.c.net-a.c.net)[0];
-  return {from,to,bal0,pnl,ret: bal0>0?pnl/bal0*100:NaN, n:cs.length, opened:S.trades.filter(t=>(!from||t.date>=from)&&(!to||t.date<to)).length,
+  return {from,to,bal0,pnl,ret: (bal0+dep)>0?pnl/(bal0+dep)*100:NaN, n:cs.length, opened:S.trades.filter(t=>(!from||t.date>=from)&&(!to||t.date<to)).length,
           wr: cs.length?w.length/cs.length*100:NaN, pf: sl>0?sw/sl:(sw>0?Infinity:NaN), avgR: Rs.length?Rs.reduce((a,b)=>a+b,0)/Rs.length:NaN,
           dd: maxDrawdown(pts).pct, best, pts};
 }
@@ -1775,6 +1862,31 @@ function shiftMonth(n){ const [Y,M]=(S.calMonth||today().slice(0,7)).split('-').
 $('calPrev').addEventListener('click',()=>shiftMonth(-1));
 $('calNext').addEventListener('click',()=>shiftMonth(1));
 
+/* =================== пополнения и выводы =================== */
+let cashType='in', cashNewId=null;
+$('cashDate').value=today();
+$('cashType').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; cashType=b.dataset.t; $('cashType').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); });
+function cashMsg(t,err){ const m=$('cashMsg'); m.textContent=t; m.className='toast'+(err?' err':''); m.hidden=false; clearTimeout(cashMsg._t); cashMsg._t=setTimeout(()=>m.hidden=true,2500); }
+function saveCash(list){ S.profile.cash=list; S.profile.updatedAt=Date.now(); S.profileDirty=true; saveLocal(); scheduleSync(0); renderAll({eq:'morph'}); }
+$('cashAdd').addEventListener('click',()=>{
+  const a=pnum($('cashAmt').value); if(!(a>0)){ cashMsg('Укажите сумму больше нуля.',true); $('cashAmt').focus(); return; }
+  if(cashType==='out' && a>balance()+1e-9){ cashMsg('Сумма вывода больше текущего депозита.',true); return; }
+  const m={id:'c'+Date.now().toString(36), date:$('cashDate').value||today(), amount: cashType==='in'?a:-a, note:$('cashNote').value.trim()};
+  cashNewId=m.id; saveCash(cashList().concat([m])); $('cashAmt').value=''; $('cashNote').value='';
+  cashMsg(cashType==='in'?'Пополнение записано':'Вывод записан');
+});
+$('cashList').addEventListener('click',e=>{ const b=e.target.closest('[data-cdel]'); if(!b) return;
+  if(!b.classList.contains('arm')){ b.classList.add('arm'); b.textContent='?'; b.title='Нажмите ещё раз, чтобы удалить'; setTimeout(()=>{ if(b.isConnected){ b.classList.remove('arm'); b.textContent='×'; } },2500); return; }
+  saveCash(cashList().filter(m=>m.id!==b.dataset.cdel)); });
+function renderCash(){
+  const list=cashList().slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const inS=list.filter(m=>m.amount>0).reduce((a,m)=>a+pnum(m.amount),0), outS=list.filter(m=>m.amount<0).reduce((a,m)=>a+pnum(m.amount),0);
+  $('cashSum').textContent = list.length ? `пополнено ${fmt(inS,0)} · выведено ${fmt(Math.abs(outS),0)}` : 'не влияют на доходность';
+  $('cashList').innerHTML = list.length ? list.map(m=>`<div class="crow ${m.id===cashNewId?'new':''}"><span class="cd">${ddmm(m.date)}</span><span class="cn">${esc(m.note|| (m.amount>0?'Пополнение':'Вывод'))}</span><span class="ca ${m.amount>0?'pos':'neg'}">${sgn(pnum(m.amount))}</span><button type="button" class="x" data-cdel="${esc(m.id)}" aria-label="Удалить запись">×</button></div>`).join('')
+    : '<p class="hint" style="margin:0">Записывайте сюда пополнения и выводы. Депозит изменится, а доходность, просадка и цели будут считаться только по сделкам.</p>';
+  cashNewId=null;
+}
+
 /* =================== эффекты =================== */
 const FX={cv:null, ctx:null, parts:[], raf:0};
 function confetti(o={}){
@@ -1858,6 +1970,7 @@ function renderEditor(opening){
       <div id="entryRows"></div>
     </div>
 
+    ${Array.isArray(d.tps)&&d.tps.length?`<div class="tpplan"><span class="lbl">План:</span>${d.tps.map((x,i)=>`<span class="tag ok">TP${i+1} ${esc(x.price)} · ${esc(x.pct)}%</span>`).join('')}${d.be?'<span class="tag info">БУ после TP1</span>':''}${(d.exits||[]).length?'':'<button type="button" class="link" id="fillTps">Закрыть по плану</button>'}</div>`:''}
     <div class="legs">
       <h3>Закрытия <button type="button" class="link" id="addExit">+ Закрытие</button></h3>
       <div class="leg leghead"><span></span><span>Цена закрытия</span><span>% позиции</span><span>Дата</span><span style="text-align:right">P&amp;L</span><span></span></div>
@@ -1899,6 +2012,7 @@ function renderEditor(opening){
   $('addEntry').addEventListener('click',()=>{ d.entries.push({price:'',margin:'',date:today()}); renderLegs('entries'); renderEdSum(); $('en-'+(d.entries.length-1)+'-price').focus(); });
   $('addExit').addEventListener('click',()=>{ const c=tradeCalc(d); const left=Math.max(0, Math.round((100-c.closedPct)*100)/100); d.exits.push({price:'',pct: left?String(left):'',date:today()}); renderLegs('exits'); renderEdSum(); $('ex-'+(d.exits.length-1)+'-price').focus(); });
   $('edSave').addEventListener('click',saveDraft);
+  if($('fillTps')) $('fillTps').addEventListener('click',()=>{ d.exits=d.tps.map(x=>({price:String(x.price), pct:String(x.pct), date:today()})); renderLegs('exits'); renderEdSum(); $('fillTps').remove(); });
   $('edCancel').addEventListener('click',()=>{ S.draft=null; S.delArm=false; renderEditor(); renderTrades(); });
   if(d.id) $('edDel').addEventListener('click',()=>{ if(!S.delArm){ S.delArm=true; const b=$('edDel'); b.classList.add('arm'); b.textContent='Точно удалить?'; return; } deleteTrade(d.id); });
 }
@@ -1950,7 +2064,7 @@ function edMsg(t, err){ const m=$('edMsg'); if(!m) return; m.textContent=t; m.cl
 
 /* =================== persistence =================== */
 function cleanTrade(d){
-  const keep=['coin','category','side','date','time','setup','tags','emo','planScore','market','conv','contract','pip','leverage','fee','stop','tp','funding','prob','comment','plan'];
+  const keep=['coin','category','side','date','time','setup','tags','emo','planScore','market','conv','contract','pip','tps','be','leverage','fee','stop','tp','funding','prob','comment','plan'];
   const o={}; keep.forEach(k=>o[k]= d[k]===undefined ? null : d[k]);
   o.coin=String(o.coin||'').trim().toUpperCase(); o.category=String(o.category||'').trim(); o.setup=String(o.setup||'').trim();
   o.tags=Array.isArray(d.tags)?d.tags.slice():[];
