@@ -295,6 +295,35 @@ button{font:inherit}
 .progress{height:6px;border-radius:3px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden}
 .progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .5s var(--ease), background .3s}
 
+/* account + login */
+.acct{position:relative}
+.acctbtn{display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;box-shadow:var(--shadow);font:600 14px var(--f-body);max-width:190px}
+.acctbtn:hover{border-color:var(--accent)}
+.acctbtn .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--muted);transition:background .3s}
+.dot.ok{background:var(--good)} .dot.sync{background:var(--accent);animation:blink 1s ease-in-out infinite} .dot.err{background:var(--bad)} .dot.off{background:var(--warn)}
+@keyframes blink{50%{opacity:.35}}
+.menu{position:absolute;right:0;top:48px;z-index:40;width:290px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 20px 50px -20px rgba(0,0,0,.45);padding:14px;display:flex;flex-direction:column;gap:12px}
+@keyframes menuIn{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+.menu:not([hidden]){animation:menuIn .25s var(--ease)}
+.menu .who{font-size:13px;color:var(--muted)} .menu .who b{display:block;font-size:16px;color:var(--ink)}
+.menu .st{font-size:13px;display:flex;align-items:center;gap:8px;color:var(--muted)}
+.menu hr{border:0;border-top:1px solid var(--line);margin:0}
+.menu .row{display:flex;flex-wrap:wrap;gap:8px}
+.menu form{gap:8px}
+@media (max-width:640px){.acctbtn .nm{display:none}.acctbtn{padding:0 12px}.menu{position:fixed;left:12px;right:12px;width:auto;top:calc(64px + env(safe-area-inset-top))}}
+.login{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px 16px;
+  background:radial-gradient(900px 500px at 80% -10%, var(--glow), transparent 60%), var(--bg)}
+.login .card{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:28px;display:flex;flex-direction:column;gap:18px;animation:rise .6s var(--ease) both}
+.login .card svg{width:48px;height:48px;border-radius:12px}
+.login h2{font-family:var(--f-display);font-size:22px;margin:0}
+.login p{margin:0;color:var(--muted);font-size:14px}
+.login form{gap:14px}
+.login .btn{width:100%;padding:12px}
+.login .toast{min-height:20px}
+.sync-note{font-size:13px;color:var(--muted)}
+.migrate{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;background:var(--accent-soft);color:var(--ink);font-size:14px;width:100%}
+
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
@@ -308,6 +337,20 @@ button{font:inherit}
   </defs>
 </svg>
 
+<div class="login" id="login" hidden>
+  <div class="card">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="var(--accent)"/><rect x="21" y="19" width="9" height="25" rx="2" fill="var(--on-accent)"/><rect x="24.5" y="12" width="2" height="40" rx="1" fill="var(--on-accent)"/><rect x="35" y="15" width="17" height="4" rx="2" fill="var(--good)"/><rect x="35" y="30" width="17" height="4" rx="2" fill="var(--on-accent)"/><rect x="35" y="45" width="17" height="4" rx="2" fill="var(--bad)"/></svg>
+    <div><h2>Калькулятор позиции</h2><p>Войдите, чтобы открыть свой дневник сделок на любом устройстве.</p></div>
+    <form id="loginForm" novalidate>
+      <div class="f"><label for="lgUser">Логин</label><input id="lgUser" autocomplete="username" autocapitalize="none" spellcheck="false"></div>
+      <div class="f"><label for="lgPass">Пароль</label><input id="lgPass" type="password" autocomplete="current-password"></div>
+      <button type="submit" class="btn" id="lgBtn">Войти</button>
+      <span class="toast err" id="lgMsg" hidden></span>
+    </form>
+    <p class="hint">Логин и пароль выдаёт администратор. Пароль можно сменить после входа.</p>
+  </div>
+</div>
+
 <div class="wrap">
   <header>
     <div class="brand">
@@ -317,6 +360,24 @@ button{font:inherit}
     <div class="hright">
       <div class="balchip" title="Текущий депозит по дневнику"><span>Депозит</span><b id="hdrBal">—</b><i id="hdrChg"></i></div>
       <button class="iconbtn" id="themeBtn" type="button" aria-label="Тема"></button>
+      <div class="acct" id="acct" hidden>
+        <button type="button" class="acctbtn" id="acctBtn" aria-haspopup="true" aria-expanded="false"><span class="dot" id="syncDot"></span><span class="nm" id="acctName">—</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></button>
+        <div class="menu" id="acctMenu" hidden>
+          <div class="who">Вы вошли как<b id="menuName">—</b></div>
+          <div class="st"><span class="dot" id="menuDot"></span><span id="menuSync">—</span></div>
+          <div class="row"><button type="button" class="btn sm ghost" id="syncNow">Синхронизировать</button></div>
+          <hr>
+          <form id="pwForm" novalidate>
+            <label for="pw1">Новый пароль</label>
+            <input id="pw1" type="password" autocomplete="new-password" placeholder="Минимум 6 символов">
+            <input id="pw2" type="password" autocomplete="new-password" placeholder="Повторите пароль" aria-label="Повторите пароль">
+            <div class="row"><button type="submit" class="btn sm">Сменить пароль</button></div>
+            <span class="toast" id="pwMsg" hidden></span>
+          </form>
+          <hr>
+          <div class="row"><button type="button" class="btn sm danger" id="logoutBtn">Выйти</button></div>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -481,6 +542,8 @@ button{font:inherit}
   <datalist id="coinList"></datalist>
 </div>
 
+<script src="config.js"></script>
+<script src="vendor/supabase.js"></script>
 <script>
 /* =================== helpers =================== */
 const $ = id => document.getElementById(id);
@@ -594,9 +657,12 @@ function calcPosition(o){
 }
 
 /* =================== state =================== */
-const LOCAL_KEY='poscalc.diary.v2';
+let LOCAL_KEY='poscalc.diary.v2';
+const LEGACY_KEY='poscalc.diary.v2';
 const S = { tab:null, profile:{startDeposit:1000}, trades:[], deleted:{}, lastBackup:0, draft:null, delArm:false,
-            levPick:null, animRows:true, bk:'category', eqRange:'all' };
+            levPick:null, animRows:true, bk:'category', eqRange:'all', dirty:{}, profileDirty:false, lastSync:0 };
+let dirtySeq=0;
+function markDirty(id){ S.dirty[id]=++dirtySeq; }
 function balance(){ return ledger(pnum(S.profile.startDeposit)||0, S.trades).balance; }
 
 /* =================== theme =================== */
@@ -799,7 +865,7 @@ function renderDiaryStats(){
   $('a-best').textContent = sgn(best); signCls($('a-best'), best||0);
   $('a-worst').textContent = sgn(worst); signCls($('a-worst'), worst||0);
 }
-$('startDep').addEventListener('change', e=>{ const v=pnum(e.target.value); if(v>=0){ S.profile.startDeposit=v; S.profile.updatedAt=Date.now(); saveLocal(); renderAll({eq:'morph'}); } else e.target.value=S.profile.startDeposit; });
+$('startDep').addEventListener('change', e=>{ const v=pnum(e.target.value); if(v>=0){ S.profile.startDeposit=v; S.profile.updatedAt=Date.now(); S.profileDirty=true; saveLocal(); renderAll({eq:'morph'}); scheduleSync(); } else e.target.value=S.profile.startDeposit; });
 
 /* ---------- breakdown ---------- */
 function renderBreakdown(){
@@ -1060,19 +1126,23 @@ function saveDraft(){
   if(!d.id) d.id='t'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const rec=Object.assign({id:d.id},body), i=S.trades.findIndex(t=>t.id===d.id), backup=[...S.trades];
   if(i>=0) S.trades[i]=rec; else S.trades.push(rec);
+  markDirty(d.id);
   if(!saveLocal()){ S.trades=backup; edMsg('Не удалось сохранить: память браузера недоступна.',true); return; }
   S.draft=JSON.parse(JSON.stringify(rec));
-  renderAll({eq:'morph'}); renderEditor(); edMsg('Сохранено');
+  renderAll({eq:'morph'}); renderEditor(); edMsg(USER?'Сохранено, отправляю в аккаунт…':'Сохранено'); scheduleSync(0);
 }
 function deleteTrade(id){
   S.trades=S.trades.filter(t=>t.id!==id);
   S.deleted=Object.assign({},S.deleted,{[id]:Date.now()});
-  saveLocal(); S.draft=null; S.delArm=false; renderEditor(); renderAll({eq:'morph'});
+  markDirty(id); saveLocal(); scheduleSync(0); S.draft=null; S.delArm=false; renderEditor(); renderAll({eq:'morph'});
 }
-function saveLocal(){ return lsSet(LOCAL_KEY,{profile:S.profile,trades:S.trades,deleted:S.deleted||{},lastBackup:S.lastBackup||0}); }
+function saveLocal(){ return lsSet(LOCAL_KEY,{profile:S.profile,trades:S.trades,deleted:S.deleted||{},lastBackup:S.lastBackup||0,dirty:S.dirty,profileDirty:S.profileDirty,lastSync:S.lastSync}); }
 function loadLocal(){
   const l=lsGet(LOCAL_KEY,null);
-  if(l){ S.profile=Object.assign({startDeposit:1000},l.profile); S.trades=Array.isArray(l.trades)?l.trades:[]; S.deleted=l.deleted||{}; S.lastBackup=l.lastBackup||0; }
+  S.profile={startDeposit:1000}; S.trades=[]; S.deleted={}; S.lastBackup=0; S.dirty={}; S.profileDirty=false; S.lastSync=0;
+  if(l){ S.profile=Object.assign({startDeposit:1000},l.profile); S.trades=Array.isArray(l.trades)?l.trades:[]; S.deleted=l.deleted||{}; S.lastBackup=l.lastBackup||0;
+         S.dirty=l.dirty||{}; S.profileDirty=!!l.profileDirty; S.lastSync=l.lastSync||0;
+         dirtySeq=Math.max(dirtySeq,...Object.values(S.dirty).map(Number).filter(isFinite),0); }
 }
 
 /* =================== backup =================== */
@@ -1108,7 +1178,7 @@ $('importFile').addEventListener('change', async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f) return;
   let data; try{ data=JSON.parse(await f.text()); }catch(err){ backupMsg('Файл не читается. Выберите файл копии .json из этого приложения.',true); return; }
   if(!data || data.app!=='poscalc' || !Array.isArray(data.trades)){ backupMsg('Это не файл копии калькулятора.',true); return; }
-  const r=mergeBackup(data); saveLocal(); S.animRows=true; renderAll({eq:'morph'}); renderEditor();
+  const r=mergeBackup(data); markAllDirty(); saveLocal(); scheduleSync(0); S.animRows=true; renderAll({eq:'morph'}); renderEditor();
   backupMsg(`Готово: добавлено ${r.added}, обновлено ${r.updated}, удалено ${r.removed}.`);
 });
 function mergeBackup(data){
@@ -1125,13 +1195,26 @@ function mergeBackup(data){
   });
   for(const [id,t] of byId){ if(S.deleted[id] && S.deleted[id] >= (t.updatedAt||0)){ byId.delete(id); res.removed++; } }
   S.trades=[...byId.values()];
-  if(data.profile && (data.profile.updatedAt||0) > (S.profile.updatedAt||0)) S.profile=Object.assign({startDeposit:1000}, data.profile);
+  if(data.profile && (data.profile.updatedAt||0) > (S.profile.updatedAt||0)){ S.profile=Object.assign({startDeposit:1000}, data.profile); S.profileDirty=true; }
   return res;
 }
 function renderBackup(){
   const el=$('backup'), n=S.trades.length;
   const days = S.lastBackup ? Math.floor((Date.now()-S.lastBackup)/86400000) : null;
   const when = S.lastBackup ? new Date(S.lastBackup).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : null;
+  if(USER){
+    el.classList.remove('stale');
+    const pend=Object.keys(S.dirty).length + (S.profileDirty?1:0);
+    const ls = S.lastSync ? new Date(S.lastSync).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : null;
+    let html = `Сделки хранятся в вашем аккаунте и видны на всех устройствах, где вы вошли. `;
+    html += SYNC.state==='off' ? `<b>Нет интернета.</b> Изменения сохранены на устройстве и отправятся, когда появится связь.` :
+            SYNC.state==='err' ? `<b>Не удалось связаться с сервером.</b> Изменения сохранены на устройстве, попробую ещё раз.` :
+            pend ? `Отправляю изменения…` : ls ? `Синхронизировано: <b>${ls}</b>.` : `Синхронизация…`;
+    const legacy=legacyOffer();
+    $('backupText').innerHTML = html + (legacy ? `<span class="migrate" style="margin-top:10px"><span>На этом устройстве есть <b>${legacy}</b> сд. без аккаунта.</span><span class="row" style="display:flex;gap:8px"><button type="button" class="btn sm" id="migYes">Перенести в аккаунт</button><button type="button" class="btn sm ghost" id="migNo">Не переносить</button></span></span>` : '');
+    if(legacy){ $('migYes').onclick=migrateLegacy; $('migNo').onclick=()=>{ lsSet('poscalc.migrated.'+USER.id,1); renderBackup(); }; }
+    return;
+  }
   el.classList.toggle('stale', n>0 && (days===null || days>=7));
   $('backupText').innerHTML = `Сделки хранятся только на этом устройстве. ` + (when ? `Последняя копия: <b>${when}</b>.${days>=7?' Пора сохранить новую.':''}` : n ? `<b>Копий ещё не было.</b> Сохраните копию, чтобы не потерять сделки и перенести их на другое устройство.` : `Чтобы перенести сделки с другого устройства, загрузите файл копии.`);
 }
@@ -1142,10 +1225,159 @@ function renderAll(o={}){
   if(S.tab==='diary'){ renderBreakdown(); renderEquity(o.eq==='morph'?{}:{instant:true}); }
   renderCalc();
 }
-loadLocal();
-setTab(location.hash==='#diary' ? 'diary' : (lsGet('poscalc.tab','calc')==='diary'?'diary':'calc'), true);
-renderAll();
-if(S.tab==='diary'){ S.animRows=true; renderTrades(); renderBreakdown(); renderEquity({fromZero:true}); }
+/* =================== аккаунт и синхронизация =================== */
+const CFG = window.POSCALC_CONFIG || {};
+const CLOUD = !!(CFG.url && CFG.anonKey && window.supabase && window.supabase.createClient);
+const LOGIN_DOMAIN = (CFG.loginDomain || 'poscalc.app').toLowerCase();
+const toEmail = l => { l=String(l||'').trim().toLowerCase(); return l.includes('@') ? l : l+'@'+LOGIN_DOMAIN; };
+const loginName = e => { e=String(e||''); return e.toLowerCase().endsWith('@'+LOGIN_DOMAIN) ? e.slice(0,-(LOGIN_DOMAIN.length+1)) : e; };
+let sb=null, USER=null;
+const SYNC={state:'idle', busy:false, again:false, t:0};
+function stripTrade(t){ const {id,...b}=t; return b; }
+function markAllDirty(){ S.trades.forEach(t=>markDirty(t.id)); Object.keys(S.deleted||{}).forEach(markDirty); }
+function setSync(st){
+  SYNC.state=st;
+  const txt={ok:'Всё синхронизировано', sync:'Синхронизация…', err:'Ошибка связи с сервером', off:'Нет интернета: изменения ждут отправки', idle:'—'}[st]||'—';
+  ['syncDot','menuDot'].forEach(id=>{ const d=$(id); if(d) d.className='dot '+st; });
+  $('menuSync').textContent = txt + (st==='ok'&&S.lastSync ? ' · '+new Date(S.lastSync).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '');
+  $('acctBtn').title=txt;
+  renderBackup();
+}
+function scheduleSync(delay=500){ if(!USER) return; clearTimeout(SYNC.t); SYNC.t=setTimeout(sync, delay); }
+async function fetchAll(table, cols){
+  let out=[], from=0; const step=1000;
+  for(;;){ const {data,error}=await sb.from(table).select(cols).range(from,from+step-1); if(error) throw error; out=out.concat(data||[]); if(!data || data.length<step) break; from+=step; }
+  return out;
+}
+async function sync(){
+  if(!sb || !USER) return;
+  if(SYNC.busy){ SYNC.again=true; return; }
+  if(!navigator.onLine){ setSync('off'); return; }
+  SYNC.busy=true; setSync('sync');
+  const uid=USER.id;
+  try{
+    // 1. отправка изменений
+    const snap=Object.assign({},S.dirty), ids=Object.keys(snap);
+    if(ids.length){
+      const rows=ids.map(id=>{ const t=S.trades.find(x=>x.id===id);
+        return t ? {user_id:uid,id,data:stripTrade(t),deleted:false,updated_at:Math.round(t.updatedAt||Date.now())}
+                 : {user_id:uid,id,data:{},deleted:true,updated_at:Math.round((S.deleted&&S.deleted[id])||Date.now())}; });
+      for(let i=0;i<rows.length;i+=500){ const {error}=await sb.from('trades').upsert(rows.slice(i,i+500),{onConflict:'user_id,id'}); if(error) throw error; }
+      ids.forEach(id=>{ if(S.dirty[id]===snap[id]) delete S.dirty[id]; });
+    }
+    if(S.profileDirty){
+      const {error}=await sb.from('profiles').upsert({user_id:uid,data:S.profile,updated_at:Math.round(S.profile.updatedAt||Date.now())},{onConflict:'user_id'}); if(error) throw error;
+      S.profileDirty=false;
+    }
+    // 2. загрузка с сервера
+    const rows=await fetchAll('trades','id,data,deleted,updated_at');
+    let changed=false; const byId=new Map(S.trades.map(t=>[t.id,t])), seen=new Set();
+    rows.forEach(r=>{
+      seen.add(r.id);
+      const local=byId.get(r.id), ts=Number(r.updated_at)||0;
+      if(S.dirty[r.id]) return;                                   // локальная правка новее, уйдёт следующей синхронизацией
+      if(r.deleted){ if(local){ byId.delete(r.id); changed=true; } S.deleted[r.id]=Math.max(S.deleted[r.id]||0,ts); return; }
+      if(!local || ts>(Number(local.updatedAt)||0)){ byId.set(r.id, Object.assign({}, r.data, {id:r.id, updatedAt:ts})); changed=true; }
+    });
+    for(const [id] of byId){ if(!seen.has(id) && !S.dirty[id]) markDirty(id); }   // есть только здесь — отправим
+    if(changed) S.trades=[...byId.values()];
+    const {data:prof,error:pe}=await sb.from('profiles').select('data,updated_at').maybeSingle(); if(pe) throw pe;
+    if(prof && !S.profileDirty && (Number(prof.updated_at)||0) > (Number(S.profile.updatedAt)||0)){ S.profile=Object.assign({startDeposit:1000}, prof.data, {updatedAt:Number(prof.updated_at)}); changed=true; }
+    else if(!prof && !S.profileDirty){ S.profileDirty=true; }
+    S.lastSync=Date.now(); saveLocal();
+    if(changed){ renderAll({eq:'morph'}); if(S.draft && S.draft.id && !S.trades.find(t=>t.id===S.draft.id)){ S.draft=null; renderEditor(); } }
+    setSync(Object.keys(S.dirty).length||S.profileDirty ? 'sync' : 'ok');
+    if(Object.keys(S.dirty).length||S.profileDirty) SYNC.again=true;
+  }catch(e){
+    console.warn('sync', e);
+    setSync(navigator.onLine ? 'err' : 'off');
+    if(e && (e.status===401 || /JWT|token/i.test(e.message||''))){ const {data}=await sb.auth.getSession(); if(!data.session){ onSignedOut(); } }
+    clearTimeout(SYNC.retry); SYNC.retry=setTimeout(sync, 30000);
+  }
+  SYNC.busy=false;
+  if(SYNC.again){ SYNC.again=false; scheduleSync(300); }
+}
+function legacyOffer(){
+  if(!USER || lsGet('poscalc.migrated.'+USER.id,0)) return 0;
+  const l=lsGet(LEGACY_KEY,null); return l && Array.isArray(l.trades) ? l.trades.length : 0;
+}
+function migrateLegacy(){
+  const l=lsGet(LEGACY_KEY,null); if(!l) return;
+  const r=mergeBackup({app:'poscalc', trades:l.trades||[], deleted:{}, profile: S.trades.length ? null : l.profile});
+  markAllDirty(); lsSet('poscalc.migrated.'+USER.id,1); saveLocal(); S.animRows=true; renderAll({eq:'morph'}); scheduleSync(0);
+  backupMsg(`Перенесено в аккаунт: ${r.added} сд.`);
+}
+
+/* вход / выход */
+function showLogin(){ $('login').hidden=false; document.querySelector('.wrap').setAttribute('aria-hidden','true'); setTimeout(()=>$('lgUser').focus(),50); }
+function hideLogin(){ $('login').hidden=true; document.querySelector('.wrap').removeAttribute('aria-hidden'); }
+function onSignedIn(user){
+  USER=user; LOCAL_KEY='poscalc.u.'+user.id;
+  loadLocal(); S.draft=null; renderEditor();
+  $('acct').hidden=false; $('acctName').textContent=$('menuName').textContent=loginName(user.email);
+  hideLogin(); S.animRows=true; renderAll();
+  if(S.tab==='diary'){ renderBreakdown(); renderEquity({fromZero:true}); }
+  setSync(navigator.onLine?'sync':'off'); sync();
+}
+function onSignedOut(){
+  if(!USER) { showLogin(); return; }
+  try{ localStorage.removeItem(LOCAL_KEY); }catch(e){}
+  USER=null; LOCAL_KEY=LEGACY_KEY; S.trades=[]; S.profile={startDeposit:1000}; S.deleted={}; S.dirty={}; S.draft=null;
+  $('acct').hidden=true; $('acctMenu').hidden=true; renderEditor(); renderAll(); showLogin();
+}
+$('loginForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const u=$('lgUser').value.trim(), p=$('lgPass').value, m=$('lgMsg');
+  m.hidden=true;
+  if(!u || !p){ m.textContent='Введите логин и пароль.'; m.hidden=false; return; }
+  $('lgBtn').disabled=true; $('lgBtn').textContent='Вхожу…';
+  const {data,error}=await sb.auth.signInWithPassword({email:toEmail(u), password:p}).catch(err=>({error:err}));
+  $('lgBtn').disabled=false; $('lgBtn').textContent='Войти';
+  if(error || !data || !data.user){
+    m.textContent = !navigator.onLine ? 'Нет интернета. Для первого входа нужна связь.' : /invalid/i.test(error&&error.message||'') ? 'Неверный логин или пароль.' : 'Не удалось войти. Попробуйте ещё раз.';
+    m.hidden=false; return;
+  }
+  $('lgPass').value=''; onSignedIn(data.user);
+});
+$('acctBtn').addEventListener('click',e=>{ e.stopPropagation(); const m=$('acctMenu'); m.hidden=!m.hidden; $('acctBtn').setAttribute('aria-expanded',String(!m.hidden)); $('logoutBtn').textContent='Выйти'; $('logoutBtn').classList.remove('arm'); });
+document.addEventListener('click',e=>{ const m=$('acctMenu'); if(!m.hidden && !m.contains(e.target) && e.target!==$('acctBtn')) { m.hidden=true; $('acctBtn').setAttribute('aria-expanded','false'); } });
+$('syncNow').addEventListener('click',()=>sync());
+$('pwForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const a=$('pw1').value, b=$('pw2').value, m=$('pwMsg');
+  const say=(t,err)=>{ m.textContent=t; m.className='toast'+(err?' err':''); m.hidden=false; };
+  if(a.length<6) return say('Пароль короче 6 символов.',true);
+  if(a!==b) return say('Пароли не совпадают.',true);
+  const {error}=await sb.auth.updateUser({password:a}).catch(err=>({error:err}));
+  if(error) return say('Не удалось сменить пароль. Проверьте интернет.',true);
+  $('pw1').value=$('pw2').value=''; say('Пароль изменён.');
+});
+$('logoutBtn').addEventListener('click', async ()=>{
+  const b=$('logoutBtn'), pend=Object.keys(S.dirty).length+(S.profileDirty?1:0);
+  if(pend && !b.classList.contains('arm')){ b.classList.add('arm'); b.textContent=`Не отправлено ${pend} изм. Всё равно выйти?`; sync(); return; }
+  try{ await sb.auth.signOut(); }catch(e){}
+  onSignedOut();
+});
+window.addEventListener('online',()=>scheduleSync(0));
+window.addEventListener('offline',()=>USER&&setSync('off'));
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') scheduleSync(200); });
+setInterval(()=>{ if(USER && document.visibilityState==='visible') sync(); }, 60000);
+
+async function boot(){
+  setTab(location.hash==='#diary' ? 'diary' : (lsGet('poscalc.tab','calc')==='diary'?'diary':'calc'), true);
+  if(!CLOUD){
+    loadLocal(); renderAll();
+    if(S.tab==='diary'){ S.animRows=true; renderTrades(); renderBreakdown(); renderEquity({fromZero:true}); }
+    return;
+  }
+  sb = window.supabase.createClient(CFG.url, CFG.anonKey, {auth:{persistSession:true, autoRefreshToken:true, storageKey:'poscalc.auth'}});
+  renderAll();
+  let session=null;
+  try{ ({data:{session}} = await sb.auth.getSession()); }catch(e){}
+  if(session && session.user) onSignedIn(session.user); else showLogin();
+  sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT' && USER) onSignedOut(); });
+}
+boot();
 if(document.fonts) document.fonts.ready.then(moveInd);
 try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
 if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});
