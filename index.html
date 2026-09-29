@@ -2020,7 +2020,10 @@ async function openChart(sym){
   CH.series.applyOptions({priceFormat:{type:'price', precision:Math.min(8,Math.max(prec,2)), minMove:Math.pow(10,-Math.min(8,Math.max(prec,2)))}});
   CH.series.setData(res.arr.map(k=>({time:Math.floor(k.t/1000)+TZS, open:k.o, high:k.h, low:k.l, close:k.c})));
   const nBars=res.arr.length, fitView=()=>{ try{ CH.chart.timeScale().setVisibleLogicalRange({from:Math.max(0,nBars-120), to:nBars+4}); }catch(e){} };
-  fitView(); requestAnimationFrame(()=>requestAnimationFrame(fitView)); setTimeout(fitView,350);
+  CH.fitView=fitView; CH.fitted=false;
+  const tryFit=()=>{ if($('chart').clientWidth>50){ fitView(); CH.fitted=true; } };
+  tryFit(); requestAnimationFrame(()=>requestAnimationFrame(tryFit)); setTimeout(tryFit,350);
+  if(!CH.ro && window.ResizeObserver){ CH.ro=new ResizeObserver(()=>{ if(!CH.fitted && CH.fitView && $('chart').clientWidth>50){ CH.fitView(); CH.fitted=true; } }); CH.ro.observe($('chart')); }
   chartOver('');
   const ex=(S.trades.filter(t=>normSym(t.coin)===sym && t.exchange).slice(-1)[0]||{}).exchange||'';
   $('chSrc').textContent = 'Данные: '+SRC[res.src].name + (ex && !SRC[res.src].name.toLowerCase().includes(ex.toLowerCase().split(' ')[0]) ? ` (у ${ex} нет открытого доступа из браузера, цены почти совпадают)` : '') + ' · время по вашему часовому поясу';
