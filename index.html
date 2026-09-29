@@ -2019,7 +2019,8 @@ async function openChart(sym){
   const prec=priceDec(res.arr[res.arr.length-1].c);
   CH.series.applyOptions({priceFormat:{type:'price', precision:Math.min(8,Math.max(prec,2)), minMove:Math.pow(10,-Math.min(8,Math.max(prec,2)))}});
   CH.series.setData(res.arr.map(k=>({time:Math.floor(k.t/1000)+TZS, open:k.o, high:k.h, low:k.l, close:k.c})));
-  CH.chart.timeScale().fitContent(); CH.chart.timeScale().scrollToRealTime();
+  const nBars=res.arr.length, fitView=()=>{ try{ CH.chart.timeScale().setVisibleLogicalRange({from:Math.max(0,nBars-120), to:nBars+4}); }catch(e){} };
+  fitView(); requestAnimationFrame(()=>requestAnimationFrame(fitView)); setTimeout(fitView,350);
   chartOver('');
   const ex=(S.trades.filter(t=>normSym(t.coin)===sym && t.exchange).slice(-1)[0]||{}).exchange||'';
   $('chSrc').textContent = 'Данные: '+SRC[res.src].name + (ex && !SRC[res.src].name.toLowerCase().includes(ex.toLowerCase().split(' ')[0]) ? ` (у ${ex} нет открытого доступа из браузера, цены почти совпадают)` : '') + ' · время по вашему часовому поясу';
