@@ -543,7 +543,7 @@ button{font:inherit}
 </div>
 
 <script src="config.js"></script>
-<script src="vendor/supabase.js"></script>
+<script src="supabase.js"></script>
 <script>
 /* =================== helpers =================== */
 const $ = id => document.getElementById(id);
@@ -1334,7 +1334,12 @@ $('loginForm').addEventListener('submit', async e=>{
   const {data,error}=await sb.auth.signInWithPassword({email:toEmail(u), password:p}).catch(err=>({error:err}));
   $('lgBtn').disabled=false; $('lgBtn').textContent='Войти';
   if(error || !data || !data.user){
-    m.textContent = !navigator.onLine ? 'Нет интернета. Для первого входа нужна связь.' : /invalid/i.test(error&&error.message||'') ? 'Неверный логин или пароль.' : 'Не удалось войти. Попробуйте ещё раз.';
+    const msg=String(error&&error.message||''), st=error&&error.status;
+    m.textContent = !navigator.onLine ? 'Нет интернета. Для первого входа нужна связь.'
+      : /invalid login|invalid_credentials|invalid_grant/i.test(msg+' '+(error&&error.code||'')) ? 'Неверный логин или пароль.'
+      : /api key|apikey|no api key/i.test(msg) || st===401 ? 'Сервер отклонил ключ приложения. Проверьте ключ в config.js.'
+      : !st || /fetch|network|Failed/i.test(msg) ? 'Сервер базы не отвечает. Проверьте адрес в config.js или интернет.'
+      : 'Не удалось войти ('+(st||'')+'). Попробуйте ещё раз.';
     m.hidden=false; return;
   }
   $('lgPass').value=''; onSignedIn(data.user);

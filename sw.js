@@ -1,8 +1,8 @@
 // Офлайн-кэш: приложение открывается без интернета после первого запуска.
 // Файлы приложения берутся из сети (чтобы сразу получать обновления), без сети — из кэша.
 // Запросы к базе (Supabase) не кэшируются.
-const CACHE = 'poscalc-v3';
-const SHELL = ['./', './index.html', './config.js', './vendor/supabase.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
+const CACHE = 'poscalc-v5';
+const SHELL = ['./', './index.html', './config.js', './supabase.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
