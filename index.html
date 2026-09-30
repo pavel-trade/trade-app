@@ -422,6 +422,12 @@ button{font:inherit}
 .prow .pu{font:700 17px var(--f-mono);text-align:right;white-space:nowrap}
 .prow .pu small{display:block;font-size:11px;font-weight:500;color:var(--muted)}
 @media (max-width:640px){.prow{grid-template-columns:1fr 1fr auto}.prow .pk.hide-m{display:none}.chsym input{width:120px}.chprice b{font-size:20px}.chwrap{height:clamp(300px,52vh,480px)}}
+/* ---- биржа и объём ---- */
+.exrow{display:flex;gap:8px}
+.exrow select{flex:1;min-width:0}
+.exrow input{flex:1;min-width:0}
+.qtybox.manual .inp input{border-color:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)}
+.qtybox.manual #qtyHint{color:var(--warn)}
 /* ---- несколько тейков ---- */
 .mtoggle{font-size:14px!important;color:var(--ink)!important;min-height:30px}
 .tprows{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2)}
@@ -736,9 +742,11 @@ table.cmp .sh{display:none}
           <div class="f only-crypto"><label for="fee">Комиссия (тейкер)</label><div class="inp"><input id="fee" inputmode="decimal" value="0.05"><span>%</span></div></div>
           <div class="f only-fx" hidden><label for="fxComm">Комиссия за лот</label><div class="inp"><input id="fxComm" inputmode="decimal" value="0" placeholder="0"><span>$</span></div></div>
           <div class="f full only-fx" hidden><label for="fxInst">Тип инструмента</label>
-            <select id="fxInst"><option value="usdq">EURUSD, GBPUSD, AUDUSD… (котировка в USD)</option><option value="usdb">USDCHF, USDCAD… (USD в начале)</option><option value="jpy">USDJPY</option><option value="xau">Золото XAUUSD</option><option value="xag">Серебро XAGUSD</option><option value="oil">Нефть Brent / WTI</option><option value="custom">Свой инструмент (котировка в USD)</option></select></div>
-          <div class="f only-fx" hidden><label for="fxContract">1 лот =</label><div class="inp"><input id="fxContract" inputmode="decimal" value="100000"><span>ед.</span></div></div>
+            <select id="fxInst"><option value="usdq">EURUSD, GBPUSD, AUDUSD… (котировка в USD)</option><option value="usdb">USDCHF, USDCAD… (USD в начале)</option><option value="jpy">USDJPY</option><option value="jpyx">EURJPY, GBPJPY… (кроссы с JPY)</option><option value="cross">EURGBP, EURCHF, AUDCAD… (другие кроссы)</option><option value="xau">Золото XAUUSD</option><option value="xag">Серебро XAGUSD</option><option value="oil">Нефть Brent / WTI</option><option value="idx">Индексы в USD: US30, NAS100, SPX500</option><option value="ger">Индекс GER40 (DAX, в EUR)</option><option value="custom">Свой инструмент (котировка в USD)</option></select></div>
+          <div class="f only-fx" hidden><label for="fxContract">Размер лота (1 лот =)</label><div class="inp"><input id="fxContract" inputmode="decimal" value="100000"><span>ед.</span></div></div>
           <div class="f only-fx" hidden><label for="fxPip">Размер пункта</label><input id="fxPip" inputmode="decimal" value="0.0001"></div>
+          <div class="f full only-fx" id="fxRateWrap" hidden><label for="fxRate" id="fxRateLbl">Курс для пересчёта в USD</label><input id="fxRate" inputmode="decimal" value=""></div>
+          <span class="hint only-fx full" id="fxInfo" hidden style="grid-column:1/-1"></span>
           <div class="f full"><label for="levs">Разрешённые плечи</label><input id="levs" value="1, 2, 3, 5, 10, 15, 20, 25, 50"><span class="hint">Через запятую. Выбирается наименьшее безопасное. Нажмите строку в таблице плеч, чтобы выбрать своё.</span></div>
         </fieldset>
 
@@ -746,13 +754,18 @@ table.cmp .sh{display:none}
           <legend>Сделка</legend>
           <div class="f"><label for="ticker" id="tickerLbl">Монета</label><input id="ticker" value="BTCUSDT" list="coinList" autocapitalize="characters"></div>
           <div class="f"><label for="cat">Категория</label><input id="cat" value="Свинг" list="catList"></div>
-          <div class="f full"><label for="exch">Биржа / брокер</label><input id="exch" value="Binance" list="exList" placeholder="Binance"></div>
+          <div class="f full"><label for="exPick" id="exLbl">Биржа</label>
+            <div class="exrow"><select id="exPick"></select><input id="exch" value="Binance" placeholder="Название" aria-label="Название биржи или брокера" hidden></div>
+            <span class="hint" id="exHint"></span></div>
           <div class="f"><label for="entry">Цена входа</label><input id="entry" inputmode="decimal" value="64200"></div>
           <div class="f"><label for="stop">Стоп-лосс</label><input id="stop" inputmode="decimal" value="63300"></div>
           <div class="f" id="tpWrap"><label for="tp">Тейк-профит</label><input id="tp" inputmode="decimal" value="66500"></div>
           <div class="f"><label for="prob">Вероятность</label>
             <div class="slider"><input type="range" id="prob" min="5" max="95" step="1" value="45"><output id="probOut">45%</output></div>
           </div>
+          <div class="f full qtybox"><div class="lblrow"><label for="qtyOv" id="qtyLbl">Объём позиции</label><button type="button" class="link" id="qtyReset" hidden>Вернуть расчётный</button></div>
+            <div class="inp"><input id="qtyOv" inputmode="decimal" placeholder="авто"><span id="qtyUnit">монет</span></div>
+            <span class="hint" id="qtyHint">Калькулятор посчитает объём под ваш риск. Можно вписать свой, риск пересчитается.</span></div>
           <div class="f full"><label class="chk mtoggle"><input type="checkbox" id="multiTp"> Несколько тейков и безубыток</label></div>
           <div class="f full tprows" id="tpRows" hidden>
             <div class="tprow tphead"><span></span><span>Цена</span><span>Доля позиции</span></div>
@@ -1081,15 +1094,16 @@ function tradeCalc(t){
   const f = (pnum(t.fee) || 0) / 100;
   const funding = pnum(t.funding) || 0;
   const inv = t.conv==='inv';   // USD/XXX: объём в USD = количество базовой валюты, P&L в котируемой валюте переводится в USD по цене выхода
+  const rt=pnum(t.rate), kx = t.conv==='mul' && rt>0 ? rt : t.conv==='div' && rt>0 ? 1/rt : 1;   // кроссы: котируемая валюта → USD
   let Q=0, notional=0, marginTot=0, pw=0;
-  (t.entries||[]).forEach(e=>{ const p=pnum(e.price), m=pnum(e.margin); if(p>0 && m>0){ const n=m*L; notional+=n; marginTot+=m; if(inv){ Q+=n; pw+=n*p; } else Q+=n/p; } });
-  const avg = Q>0 ? (inv ? pw/Q : notional/Q) : NaN;
+  (t.entries||[]).forEach(e=>{ const p=pnum(e.price), m=pnum(e.margin); if(p>0 && m>0){ const n=m*L; notional+=n; marginTot+=m; if(inv){ Q+=n; pw+=n*p; } else Q+=n/(p*kx); } });
+  const avg = Q>0 ? (inv ? pw/Q : notional/(Q*kx)) : NaN;
   const entryFees = notional*f;
   let closedPct=0, gross=0, exitFees=0;
   const legs = (t.exits||[]).map(x=>{
     const price=pnum(x.price), pct=pnum(x.pct);
     if(!(price>0 && pct>0 && Q>0)) return {valid:false};
-    const q = Q*pct/100, g = inv ? q*(price-avg)*dir/price : q*(price-avg)*dir, fe = inv ? q*f : q*price*f;
+    const q = Q*pct/100, g = inv ? q*(price-avg)*dir/price : q*(price-avg)*dir*kx, fe = inv ? q*f : q*price*kx*f;
     closedPct+=pct; gross+=g; exitFees+=fe;
     return {valid:true, q, gross:g, fee:fe, net:g-fe, date:x.date};
   });
@@ -1098,7 +1112,7 @@ function tradeCalc(t){
   const status = Q===0 ? 'draft' : closedPct >= 99.99 ? 'closed' : closedPct > 0 ? 'partial' : 'open';
   const stop = pnum(t.stop);
   const stopOk = stop>0 && Q>0 && (dir>0 ? stop<avg : stop>avg);
-  const riskUsd = stopOk ? (inv ? Q*Math.abs(avg-stop)/stop + notional*f + Q*f : Q*Math.abs(avg-stop) + notional*f + Q*stop*f) : NaN;
+  const riskUsd = stopOk ? (inv ? Q*Math.abs(avg-stop)/stop + notional*f + Q*f : Q*Math.abs(avg-stop)*kx + notional*f + Q*stop*kx*f) : NaN;
   const R = riskUsd>0 ? net/riskUsd : NaN;
   const exitDates = (t.exits||[]).map(x=>x.date).filter(Boolean).sort();
   return {dir,L,Q,notional,marginTot,avg,inv,lots: pnum(t.contract)>0 ? Q/pnum(t.contract) : NaN,entryFees,exitFees,fees,funding,gross,net,closedPct,legs,status,riskUsd,R,
@@ -1134,8 +1148,9 @@ function calcPosition(o){
   const {D,r,cap,feePct,E,S:Sp,T,p,levs,pick} = o;
   if(!(D>0&&r>0&&E>0&&Sp>0) || E===Sp) return {ok:false, msg: E===Sp && E>0 ? 'Стоп совпадает с ценой входа.' : 'Заполните депозит, риск, вход и стоп.'};
   const f=(feePct||0)/100, long=Sp<E, d=Math.abs(E-Sp)/E;
-  const riskUsd=D*r/100, lossPerN=d+f*(1+Sp/E);
-  const notional=riskUsd/lossPerN, qty=notional/E;
+  const riskPlan=D*r/100, lossPerN=d+f*(1+Sp/E);
+  const qtyAuto=riskPlan/lossPerN/E, manualQty=o.qtyOv>0;
+  const qty = manualQty ? o.qtyOv : qtyAuto, notional=qty*E, riskUsd=notional*lossPerN;
   const tpValid = T>0 && (long ? T>E : T<E);
   const tpPct = tpValid ? Math.abs(T-E)/E : NaN;
   const profitUsd = tpValid ? notional*(tpPct - f*(1+T/E)) : NaN;
@@ -1153,7 +1168,7 @@ function calcPosition(o){
   const rec = rows.find(x=>x.st==='ok') || null;
   const picked = pick ? rows.find(x=>x.L===pick) : null;
   const use = picked || rec;
-  return {ok:true,D,r,feePct,E,S:Sp,T,p,long,stopPct:d*100,riskUsd,notional,qty,tpValid,tpPct:tpPct*100,profitUsd,rr,ev,evR,beWin,rows,rec,use,manual:!!picked,capUsd,
+  return {ok:true,D,r:riskUsd/D*100,rPlan:r,riskPlan,qtyAuto,manualQty,feePct,E,S:Sp,T,p,long,stopPct:d*100,riskUsd,notional,qty,tpValid,tpPct:tpPct*100,profitUsd,rr,ev,evR,beWin,rows,rec,use,manual:!!picked,capUsd,
           feeStopPct:f*(1+Sp/E)*100};
 }
 
@@ -1165,27 +1180,35 @@ const FX_PRESETS={
   usdq:{name:'EURUSD, GBPUSD, AUDUSD… (котировка в USD)', contract:100000, pip:0.0001, conv:'usd'},
   usdb:{name:'USDCHF, USDCAD… (USD в начале)', contract:100000, pip:0.0001, conv:'inv'},
   jpy:{name:'USDJPY', contract:100000, pip:0.01, conv:'inv'},
+  jpyx:{name:'EURJPY, GBPJPY… (кроссы с JPY)', contract:100000, pip:0.01, conv:'div', rateLbl:'Курс USDJPY', rateDef:150},
+  cross:{name:'EURGBP, EURCHF, AUDCAD… (другие кроссы)', contract:100000, pip:0.0001, conv:'mul', rateLbl:'Курс котируемой валюты к USD (для EURGBP — курс GBPUSD)', rateDef:1.3},
   xau:{name:'Золото XAUUSD', contract:100, pip:0.01, conv:'usd'},
   xag:{name:'Серебро XAGUSD', contract:5000, pip:0.001, conv:'usd'},
   oil:{name:'Нефть Brent / WTI', contract:1000, pip:0.01, conv:'usd'},
+  idx:{name:'Индексы в USD: US30, NAS100, SPX500', contract:1, pip:1, conv:'usd'},
+  ger:{name:'Индекс GER40 (DAX, в EUR)', contract:1, pip:1, conv:'mul', rateLbl:'Курс EURUSD', rateDef:1.1},
   custom:{name:'Свой инструмент (котировка в USD)', contract:null, pip:null, conv:'usd'}
 };
 function calcForex(o){
-  const {D,r,cap,E,S:Sp,T,p,levs,pick,contract,pip,conv,commLot} = o;
+  const {D,r,cap,E,S:Sp,T,p,levs,pick,contract,pip,conv,commLot,rate} = o;
   if(!(D>0&&r>0&&E>0&&Sp>0) || E===Sp) return {ok:false, msg: E===Sp && E>0 ? 'Стоп совпадает с ценой входа.' : 'Заполните депозит, риск, вход и стоп.'};
   if(!(contract>0 && pip>0)) return {ok:false, msg:'Укажите размер контракта и размер пункта.'};
   const long=Sp<E, inv=conv==='inv', cm=commLot>0?commLot:0;
+  const k = conv==='mul' ? rate : conv==='div' ? 1/rate : 1;   // котируемая валюта → USD
+  if(!(k>0) || !isFinite(k)) return {ok:false, msg:'Укажите курс для пересчёта в USD.'};
   const pipsStop=Math.abs(E-Sp)/pip;
-  const pipValLot = inv ? contract*pip/Sp : contract*pip;
+  const pipValLot = inv ? contract*pip/Sp : contract*pip*k;
   const riskPlan=D*r/100;
   const lotsRaw = riskPlan/(pipsStop*pipValLot + cm);
-  let lots = Math.floor(lotsRaw*100+1e-9)/100; const tooSmall = lots<0.01; if(tooSmall) lots=0.01;
+  const lotsAuto = Math.max(0.01, Math.floor(lotsRaw*100+1e-9)/100), manualQty=o.lotsOv>0;
+  const lots = manualQty ? Math.max(0.01, Math.round(o.lotsOv*100)/100) : lotsAuto;
+  const tooSmall = !manualQty && lotsRaw<0.01;
   const qty=lots*contract, comm=cm*lots;
-  const riskUsd = (inv ? qty*Math.abs(E-Sp)/Sp : qty*Math.abs(E-Sp)) + comm;
-  const notional = inv ? qty : qty*E;
+  const riskUsd = (inv ? qty*Math.abs(E-Sp)/Sp : qty*Math.abs(E-Sp)*k) + comm;
+  const notional = inv ? qty : qty*E*k;
   const tpValid = T>0 && (long ? T>E : T<E);
   const tpPips = tpValid ? Math.abs(T-E)/pip : NaN;
-  const profitUsd = tpValid ? (inv ? qty*Math.abs(T-E)/T : qty*Math.abs(T-E)) - comm : NaN;
+  const profitUsd = tpValid ? (inv ? qty*Math.abs(T-E)/T : qty*Math.abs(T-E)*k) - comm : NaN;
   const rr = tpValid ? profitUsd/riskUsd : NaN;
   const ev = tpValid ? p*profitUsd - (1-p)*riskUsd : NaN;
   const evR = tpValid ? p*rr - (1-p) : NaN;
@@ -1194,15 +1217,15 @@ function calcForex(o){
   const rows = levs.map(L=>{ const margin=notional/L; let st='ok'; if(margin>D) st='no'; else if(margin>capUsd) st='mid'; return {L,margin,liq:NaN,liqSafe:true,buffer:Infinity,st}; });
   const rec = rows.find(x=>x.st==='ok') || null;
   const picked = pick ? rows.find(x=>x.L===pick) : null;
-  const feePct = cm>0 ? (cm/2)/(inv?contract:contract*E)*100 : 0;   // комиссия за лот → % от объёма для дневника
-  return {ok:true,fx:true,D,r:riskUsd/D*100,rPlan:r,feePct,E,S:Sp,T,p,long,stopPct:Math.abs(E-Sp)/E*100,riskUsd,riskPlan,notional,qty,lots,lotsRaw,tooSmall,pipsStop,tpPips,pipValLot,contract,pip,conv,comm,
+  const feePct = cm>0 ? (cm/2)/(inv?contract:contract*E*k)*100 : 0;   // комиссия за лот → % от объёма для дневника
+  return {ok:true,fx:true,D,r:riskUsd/D*100,rPlan:r,feePct,E,S:Sp,T,p,long,stopPct:Math.abs(E-Sp)/E*100,riskUsd,riskPlan,notional,qty,lots,lotsRaw,lotsAuto,manualQty,tooSmall,pipsStop,tpPips,pipValLot,contract,pip,conv,comm,k,rate,
           tpValid,tpPct:tpValid?Math.abs(T-E)/E*100:NaN,profitUsd,rr,ev,evR,beWin,rows,rec,use:picked||rec,manual:!!picked,capUsd,feeStopPct:0};
 }
 
 /* Несколько тейков: прибыль = сумма по каждому тейку своей доли позиции (с комиссиями входа и выхода этой доли).
    Безубыток после TP1: TP1 закрывает свою долю, остаток выходит по цене входа (минус комиссии остатка). */
 function tpLegProfit(c, T, w){
-  if(c.fx){ const q=c.qty*w, inv=c.conv==='inv'; return (inv ? q*Math.abs(T-c.E)/T : q*Math.abs(T-c.E)) - c.comm*w; }
+  if(c.fx){ const q=c.qty*w, inv=c.conv==='inv'; return (inv ? q*Math.abs(T-c.E)/T : q*Math.abs(T-c.E)*(c.k||1)) - c.comm*w; }
   const f=(c.feePct||0)/100; return c.notional*w*(Math.abs(T-c.E)/c.E - f*(1+T/c.E));
 }
 function applyTps(c, o){
@@ -1284,31 +1307,67 @@ document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',
 window.addEventListener('resize',()=>{ moveInd(); clearTimeout(window._rz); window._rz=setTimeout(()=>{ if(S.tab==='stats') renderEquity({instant:true}); },150); });
 
 /* =================== calculator =================== */
-const CALC_KEYS=['exch','risk','cap','fee','levs','depSync','fxInst','fxContract','fxPip','fxComm','multiTp','tp1p','tp2p','tp3p','beAfter'];
+const CALC_KEYS=['exch','risk','cap','fee','levs','depSync','fxInst','fxContract','fxPip','fxRate','fxComm','multiTp','tp1p','tp2p','tp3p','beAfter'];
 let MODE = lsGet('poscalc.mode','crypto')==='fx' ? 'fx' : 'crypto';
 (function restoreCalc(){ const s=lsGet('poscalc.calc',null); if(!s) return;
   CALC_KEYS.forEach(k=>{ if(s[k]===undefined) return; if($(k).type==='checkbox') $(k).checked=s[k]; else $(k).value=s[k]; });
   if(!s.depSync && s.dep) $('dep').value=s.dep; })();
 function saveCalc(){ const o={}; CALC_KEYS.forEach(k=>o[k]= $(k).type==='checkbox'? $(k).checked : $(k).value); o.dep=$('dep').value; lsSet('poscalc.calc',o); }
 
+/* ---- биржи и брокеры: комиссия подставляется при выборе ---- */
+const EXCH={
+  crypto:[['Binance',0.05],['Bybit',0.055],['OKX',0.05],['Bitget',0.06],['BingX',0.05],['MEXC',0.02],['Gate',0.05],['KuCoin',0.06],['HTX',0.05]],
+  fx:[['Стандартный счёт',0],['ECN / Raw-счёт',7],['Центовый счёт',0]]
+};
+function renderExOptions(keepName){
+  const list=EXCH[MODE], cur=keepName!=null?keepName:$('exch').value, known=list.find(x=>x[0]===cur);
+  $('exLbl').textContent = MODE==='fx' ? 'Брокер / тип счёта' : 'Биржа';
+  $('exPick').innerHTML = list.map(([n,f])=>`<option value="${esc(n)}">${esc(n)} · ${MODE==='fx'?(f?'$'+f+' за лот':'без комиссии'):fmt(f,3).replace(/0+$/,'').replace(/,$/,'')+'%'}</option>`).join('') + `<option value="__other">${MODE==='fx'?'Другой брокер…':'Другая биржа…'}</option>`;
+  if(known){ $('exPick').value=cur; $('exch').hidden=true; } else if(cur){ $('exPick').value='__other'; $('exch').hidden=false; $('exch').value=cur; } else { $('exPick').value=list[0][0]; $('exch').value=list[0][0]; $('exch').hidden=true; }
+  exHint();
+}
+function exHint(){
+  const v=$('exPick').value, it=EXCH[MODE].find(x=>x[0]===v);
+  $('exHint').textContent = !it ? (MODE==='fx'?'Впишите название брокера, комиссию за лот укажите выше.':'Впишите название биржи, комиссию укажите выше.')
+    : MODE==='fx' ? (it[1] ? `Подставлена комиссия $${it[1]} за лот (открытие + закрытие). Проверьте условия своего брокера.` : 'Брокер берёт плату спредом, комиссия за лот 0.')
+    : `Подставлена комиссия тейкера ${String(it[1]).replace('.',',')}% для обычного уровня. Если у вас VIP или скидка, поправьте поле «Комиссия».`;
+}
+$('exPick').addEventListener('change',()=>{
+  const v=$('exPick').value, it=EXCH[MODE].find(x=>x[0]===v);
+  if(it){ $('exch').value=it[0]; $('exch').hidden=true; if(MODE==='fx') $('fxComm').value=it[1]; else $('fee').value=it[1]; }
+  else { $('exch').hidden=false; $('exch').value=''; $('exch').focus(); }
+  lsSet('poscalc.ex.'+MODE, $('exch').value); exHint(); renderCalc(); saveCalc();
+});
+$('exch').addEventListener('change',()=>lsSet('poscalc.ex.'+MODE, $('exch').value));
+/* ---- форекс: пресеты заполняют поля, поля можно менять ---- */
+function fxPresetFill(){
+  const pr=FX_PRESETS[$('fxInst').value]||FX_PRESETS.usdq;
+  if(pr.contract) $('fxContract').value=pr.contract; if(pr.pip) $('fxPip').value=pr.pip;
+  if(pr.rateDef) $('fxRate').value=pr.rateDef;
+}
+$('fxInst').addEventListener('change',()=>{ fxPresetFill(); renderCalc(); saveCalc(); });
 function fxParams(){
-  const pr=FX_PRESETS[$('fxInst').value]||FX_PRESETS.usdq, custom=$('fxInst').value==='custom';
-  if(!custom){ $('fxContract').value=pr.contract; $('fxPip').value=pr.pip; }
-  $('fxContract').readOnly=!custom; $('fxPip').readOnly=!custom;
-  return {contract: custom?num('fxContract'):pr.contract, pip: custom?num('fxPip'):pr.pip, conv: pr.conv, commLot: num('fxComm')||0};
+  const pr=FX_PRESETS[$('fxInst').value]||FX_PRESETS.usdq;
+  if(!$('fxContract').value && pr.contract) $('fxContract').value=pr.contract;
+  if(!$('fxPip').value && pr.pip) $('fxPip').value=pr.pip;
+  const needRate = pr.conv==='mul' || pr.conv==='div';
+  $('fxRateWrap').hidden = MODE!=='fx' || !needRate; if(needRate){ $('fxRateLbl').textContent=pr.rateLbl; if(!$('fxRate').value) $('fxRate').value=pr.rateDef; }
+  return {contract:num('fxContract'), pip:num('fxPip'), conv:pr.conv, rate: needRate ? num('fxRate') : 1, commLot: num('fxComm')||0, lotsOv: num('qtyOv')};
 }
 function applyMode(){
   document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.toggle('on', b.dataset.m===MODE));
   document.querySelectorAll('.only-fx').forEach(e=>e.hidden = MODE!=='fx');
   document.querySelectorAll('.only-crypto').forEach(e=>e.hidden = MODE==='fx');
   $('tickerLbl').textContent = MODE==='fx' ? 'Инструмент' : 'Монета';
+  $('qtyLbl').textContent = MODE==='fx' ? 'Объём позиции, лотов' : 'Объём позиции, монет'; $('qtyUnit').textContent = MODE==='fx' ? 'лот' : 'монет';
+  renderExOptions(lsGet('poscalc.ex.'+MODE, null));
   $('levTbl').classList.toggle('fx', MODE==='fx');
   $('levNote').textContent = MODE==='fx' ? 'Маржа = объём / плечо. У форекс-брокеров вместо ликвидации — уровень stop-out, он зависит от брокера, поэтому здесь не считается.' : 'Изолированная маржа. Ликвидация примерная: поддерживающая маржа 0,5%. Плечо не меняет риск в USDT, только сумму маржи и расстояние до ликвидации.';
 }
 function readCalc(){
   const levs=[...new Set($('levs').value.split(/[,;\s]+/).map(Number).filter(x=>x>=1 && x<=500))].sort((a,b)=>a-b);
   ['dep','risk','entry','stop'].forEach(id=>$(id).classList.toggle('err', $(id).value!=='' && !(num(id)>0)));
-  const o={D:num('dep'), r:num('risk'), cap:num('cap'), feePct:num('fee')||0, E:num('entry'), S:num('stop'), T:num('tp'), p:num('prob')/100, levs, pick:S.levPick};
+  const o={D:num('dep'), r:num('risk'), cap:num('cap'), feePct:num('fee')||0, E:num('entry'), S:num('stop'), T:num('tp'), p:num('prob')/100, levs, pick:S.levPick, qtyOv: MODE==='fx'?NaN:num('qtyOv')};
   const multi=$('multiTp').checked; $('tpRows').hidden=!multi; $('tpWrap').hidden=multi;
   if(multi){ o.tps=[1,2,3].map(i=>({T:num('tp'+i), w:(num('tp'+i+'p')||0)/100})).filter(x=>x.T>0 && x.w>0); o.be=$('beAfter').checked;
     const far=o.tps.slice().sort((a,b)=>Math.abs(b.T-o.E)-Math.abs(a.T-o.E))[0]; o.T = far ? far.T : NaN; }
@@ -1372,9 +1431,14 @@ function renderCalc(){
   else { tween($('c-stop'), c.stopPct, x=>fmt(x,2)+'%'); setText('c-stop-s', 'с комиссиями '+fmt(c.stopPct+c.feeStopPct,2)+'%'); }
   const CUR=c.fx?'USD':'USDT'; $('c-profit-s').textContent = c.multi && c.be && isFinite(c.beProfit) ? `все тейки · БУ: ${sgn(c.beProfit)}` : c.multi ? CUR+' · все тейки' : CUR+' после комиссий';
   if(c.multi) $('tpSumHint').textContent = `Сумма долей: ${fmt(c.wsum*100,0)}%`; 
-  tween($('c-risk'), c.riskUsd, x=>'−'+fmt(x,2)); setText('c-risk-s', CUR+' · '+fmt(c.r,2)+'% депо');
-  if(c.fx){ tween($('c-size'), c.lots, x=>fmt(x,2)+' лота'); setText('c-size-s', fmt(c.qty,0)+' ед. · $'+fmt(c.notional,0)+(c.tooSmall?' · мин. лот':'')); }
-  else { tween($('c-size'), c.notional, x=>fmt(x,2)); setText('c-size-s', 'USDT · '+fmt(c.qty, c.qty<1?5:3)+' монет'); }
+  tween($('c-risk'), c.riskUsd, x=>'−'+fmt(x,2)); setText('c-risk-s', CUR+' · '+fmt(c.r,2)+'% депо'+(c.manualQty&&Math.abs(c.r-c.rPlan)>0.005?' (план '+fmt(c.rPlan,2)+'%)':''));
+  if(c.fx){ tween($('c-size'), c.lots, x=>fmt(x,2)+' лота'); setText('c-size-s', fmt(c.qty,c.qty<10?2:0)+' ед. · $'+fmt(c.notional,0)+(c.manualQty?' · вручную':c.tooSmall?' · мин. лот':'')); }
+  else { tween($('c-size'), c.notional, x=>fmt(x,2)); setText('c-size-s', 'USDT · '+fmt(c.qty, c.qty<1?5:3)+' монет'+(c.manualQty?' · вручную':'')); }
+  { const box=$('qtyOv').closest('.qtybox'), man=!!c.manualQty, auto = c.fx ? c.lotsAuto : c.qtyAuto, unit = c.fx ? ' лота' : ' монет', dec = c.fx ? 2 : (auto<1?5:3);
+    box.classList.toggle('manual', man); $('qtyReset').hidden=!man; $('qtyOv').placeholder='авто: '+fmt(auto,dec);
+    $('qtyHint').textContent = man ? `Вручную: риск ${fmt(c.riskUsd,2)} ${c.fx?'USD':'USDT'} = ${fmt(c.r,2)}% депозита (по плану ${fmt(c.rPlan,2)}%). Расчётный объём: ${fmt(auto,dec)}${unit}.`
+      : `Под риск ${fmt(c.rPlan,2)}% нужно ${fmt(auto,dec)}${unit}. Можно вписать свой объём, риск пересчитается.`;
+    if(c.fx) $('fxInfo').textContent = `1 пункт на 1 лот = $${fmt(c.pipValLot,2)} · 1 лот = ${fmt(c.contract,0)} ед.${c.conv==='mul'||c.conv==='div'?' · пересчёт в USD по курсу '+String(c.rate).replace('.',','):''}`; }
   $('c-lev').textContent = u ? 'x'+u.L : 'нет'; setText('c-lev-s', !u ? 'смотрите таблицу' : c.manual ? 'выбрано вручную' : c.fx ? 'наименьшее в лимите маржи' : 'наименьшее безопасное');
   tween($('c-margin'), u?u.margin:NaN, x=>fmt(x,2)); setText('c-margin-s', u ? CUR+' · '+fmt(u.margin/c.D*100,1)+'% депо' : '');
   if(c.fx) tween($('c-tp'), c.tpValid?c.tpPips:NaN, x=>fmt(x,1)+' п.'); else tween($('c-tp'), c.tpValid?c.tpPct:NaN, x=>fmt(x,2)+'%');
@@ -1421,8 +1485,10 @@ $('modeSeg').addEventListener('click',e=>{ const b=e.target.closest('button'); i
   const tk=$('ticker'); if(MODE==='fx' && /USDT$/i.test(tk.value)) tk.value='EURUSD'; if(MODE==='crypto' && !/USDT$/i.test(tk.value)) tk.value='BTCUSDT';
   if(MODE==='fx' && $('levs').value.trim()==='1, 2, 3, 5, 10, 15, 20, 25, 50') $('levs').value='10, 20, 30, 50, 100, 200, 500';
   if(MODE==='crypto' && $('levs').value.trim()==='10, 20, 30, 50, 100, 200, 500') $('levs').value='1, 2, 3, 5, 10, 15, 20, 25, 50';
+  $('qtyOv').value=''; if(MODE==='fx') fxPresetFill();
   applyMode(); renderCalc(); saveCalc(); });
-$('clear').addEventListener('click',()=>{ ['entry','stop','tp','comment'].forEach(id=>$(id).value=''); S.levPick=null; renderCalc(); $('entry').focus(); });
+$('qtyReset').addEventListener('click',()=>{ $('qtyOv').value=''; renderCalc(); $('qtyOv').focus(); });
+$('clear').addEventListener('click',()=>{ ['entry','stop','tp','comment','qtyOv'].forEach(id=>$(id).value=''); S.levPick=null; renderCalc(); $('entry').focus(); });
 $('form').addEventListener('submit',e=>{
   e.preventDefault();
   const L=lastCalc; if(!L){ $('entry').focus(); return; }
@@ -1434,7 +1500,7 @@ $('form').addEventListener('submit',e=>{
     leverage:lev, fee:c.feePct, stop:String(c.S), tp:c.tpValid?String(c.T):'', prob:Math.round(c.p*100), comment:$('comment').value.trim(),
     plan:{score:L.s.score, verdict:L.badge, riskPct:c.r, rr: isFinite(c.rr)?+c.rr.toFixed(2):null},
     entries:[{price:String(c.E), margin:(c.notional/lev).toFixed(2), date:today()}],
-  }), c.fx ? {market:'fx', conv:c.conv, contract:c.contract, pip:c.pip, fee:+c.feePct.toFixed(6)} : {market:'crypto'});
+  }), c.fx ? {market:'fx', conv:c.conv, rate:(c.conv==='mul'||c.conv==='div')?c.rate:null, contract:c.contract, pip:c.pip, fee:+c.feePct.toFixed(6)} : {market:'crypto'});
   S.delArm=false; setTab('diary'); renderEditor(true);
   setTimeout(()=>$('editor').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}),60);
 });
@@ -1950,9 +2016,10 @@ const CH={chart:null, series:null, lines:[], tf:'4h', sym:'', src:null, candles:
 const TZS = -new Date().getTimezoneOffset()*60;   // показываем время по часам телефона
 function loadLWC(){ if(window.LightweightCharts) return Promise.resolve(); if(CH.lwc) return CH.lwc;
   CH.lwc=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='lightweight-charts.js'; sc.onload=res; sc.onerror=()=>{ CH.lwc=null; rej(new Error('lwc')); }; document.head.appendChild(sc); }); return CH.lwc; }
-function normSym(x){ x=String(x||'').toUpperCase().replace(/[\s\/\-:_]/g,'').replace(/\.P$/,''); if(!x) return ''; if(/^(XAU|XAG|BRENT|WTI|UKOIL|USOIL)/.test(x)) return x; if(/USDT$|USDC$|FDUSD$/.test(x)) return x; if(/^[A-Z]{6}$/.test(x) && /^(EUR|GBP|USD|AUD|NZD|CAD|CHF|JPY)/.test(x)) return x; return x+'USDT'; }
+function normSym(x){ x=String(x||'').toUpperCase().replace(/[\s\/\-:_]/g,'').replace(/\.P$/,''); if(!x) return ''; if(/^(XAU|XAG|BRENT|WTI|UKOIL|USOIL|US30|NAS100|NQ100|SPX500|US500|GER40|DE40|UK100|JP225)/.test(x)) return x; if(/USDT$|USDC$|FDUSD$/.test(x)) return x; if(/^[A-Z]{6}$/.test(x) && /^(EUR|GBP|USD|AUD|NZD|CAD|CHF|JPY)/.test(x)) return x; return x+'USDT'; }
 const isCryptoSym = x => /USDT$|USDC$|FDUSD$/.test(x);
-function tvSymbol(x){ if(/^BRENT|^UKOIL/.test(x)) return 'TVC:UKOIL'; if(/^WTI|^USOIL/.test(x)) return 'TVC:USOIL'; if(/^XAU/.test(x)) return 'OANDA:XAUUSD'; if(/^XAG/.test(x)) return 'OANDA:XAGUSD'; return 'FX:'+x; }
+function tvSymbol(x){ if(/^US30/.test(x)) return 'TVC:DJI'; if(/^(NAS100|NQ100)/.test(x)) return 'NASDAQ:NDX'; if(/^(SPX500|US500)/.test(x)) return 'SP:SPX'; if(/^(GER40|DE40)/.test(x)) return 'XETR:DAX'; if(/^UK100/.test(x)) return 'TVC:UKX'; if(/^JP225/.test(x)) return 'TVC:NI225';
+  if(/^BRENT|^UKOIL/.test(x)) return 'TVC:UKOIL'; if(/^WTI|^USOIL/.test(x)) return 'TVC:USOIL'; if(/^XAU/.test(x)) return 'OANDA:XAUUSD'; if(/^XAG/.test(x)) return 'OANDA:XAGUSD'; return 'FX:'+x; }
 const SRC={
   binF:{name:'Binance Futures', url:(s,tf,n)=>`https://fapi.binance.com/fapi/v1/klines?symbol=${s}&interval=${tf}&limit=${n}`, parse:j=>j.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4]}))},
   binS:{name:'Binance Spot', url:(s,tf,n)=>`https://api.binance.com/api/v3/klines?symbol=${s}&interval=${tf}&limit=${n}`, parse:j=>j.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4]}))},
@@ -2271,7 +2338,7 @@ function edMsg(t, err){ const m=$('edMsg'); if(!m) return; m.textContent=t; m.cl
 
 /* =================== persistence =================== */
 function cleanTrade(d){
-  const keep=['coin','category','exchange','side','date','time','setup','tags','emo','planScore','market','conv','contract','pip','tps','be','leverage','fee','stop','tp','funding','prob','comment','plan'];
+  const keep=['coin','category','exchange','side','date','time','setup','tags','emo','planScore','market','conv','rate','contract','pip','tps','be','leverage','fee','stop','tp','funding','prob','comment','plan'];
   const o={}; keep.forEach(k=>o[k]= d[k]===undefined ? null : d[k]);
   o.coin=String(o.coin||'').trim().toUpperCase(); o.category=String(o.category||'').trim(); o.exchange=String(o.exchange||'').trim(); o.setup=String(o.setup||'').trim();
   o.tags=Array.isArray(d.tags)?d.tags.slice():[];
