@@ -1390,7 +1390,7 @@ $('fxSym').addEventListener('change',()=>{
   ['entry','stop','tp','tp1','tp2','tp3','qtyOv'].forEach(id=>$(id).value='');   // цены другого инструмента не подходят
   fxGuess(v,true); renderCalc(); saveCalc();
 });
-function fxGuess(sym,force,quiet){
+function fxSpec(sym){
   const x=String(sym||'').toUpperCase().replace(/[^A-Z0-9]/g,''); let t=null, pip=null, rp='';
   if(/^XAU/.test(x)) t='xau'; else if(/^XAG/.test(x)) t='xag'; else if(/^(XPT|XPD)/.test(x)) t='xpt';
   else if(/^(BRENT|WTI|UKOIL|USOIL)/.test(x)) t='oil'; else if(/^(XNG|NATGAS|NGAS)/.test(x)) t='gas';
@@ -1404,7 +1404,10 @@ function fxGuess(sym,force,quiet){
     else if(['EUR','GBP','AUD','NZD'].includes(q)){ t='cross'; rp=q+'USD'; }
     else { t='crossd'; rp='USD'+q; }
     if(q==='HUF') pip=0.01; }
-  if(!t) return;
+  return t ? {t, pip, rp} : null;
+}
+function fxGuess(sym,force,quiet){
+  const sp=fxSpec(sym); if(!sp) return; const {t,pip,rp}=sp;
   const changed = force || $('fxInst').value!==t || RATE_PAIR!==rp;
   RATE_PAIR=rp; $('fxInst').value=t;
   if(changed && !quiet){ fxPresetFill(); if(pip) $('fxPip').value=pip; }
@@ -1423,6 +1426,7 @@ async function loadRates(){
       if(['1','wait'].includes($('fxRate').dataset.auto) && RATE_PAIR){ const v=rateFor(RATE_PAIR); if(v){ $('fxRate').value=v; $('fxRate').dataset.auto='1'; renderCalc(); } } } }catch(e){}
 }
 $('fxRate').addEventListener('input',()=>{ $('fxRate').dataset.auto='0'; });
+setTimeout(loadRates, 1500);   // курсы нужны и калькулятору, и дневнику
 $('ticker').addEventListener('change',()=>{ const v=$('ticker').value.trim().toUpperCase(); $('ticker').value=v; lsSet('poscalc.tk.'+MODE, v);
   if(MODE==='fx'){ fxGuess(v,true); syncSymPicker(); renderCalc(); saveCalc(); } });
 /* ---- форекс: пресеты заполняют поля, поля можно менять ---- */
@@ -1593,7 +1597,7 @@ $('form').addEventListener('submit',e=>{
     leverage:lev, fee:c.feePct, stop:String(c.S), tp:c.tpValid?String(c.T):'', prob:Math.round(c.p*100), comment:$('comment').value.trim(),
     plan:{score:L.s.score, verdict:L.badge, riskPct:c.r, rr: isFinite(c.rr)?+c.rr.toFixed(2):null},
     entries:[{price:String(c.E), margin:(c.notional/lev).toFixed(2), date:today()}],
-  }), c.fx ? {market:'fx', conv:c.conv, rate:(c.conv==='mul'||c.conv==='div')?c.rate:null, contract:c.contract, pip:c.pip, fee:+c.feePct.toFixed(6)} : {market:'crypto'});
+  }), c.fx ? {market:'fx', conv:c.conv, rate:(c.conv==='mul'||c.conv==='div')?c.rate:null, ratePair:RATE_PAIR||'', commLot:c.comm&&c.lots?+(c.comm/c.lots).toFixed(2):0, contract:c.contract, pip:c.pip, fee:+c.feePct.toFixed(6)} : {market:'crypto'});
   S.delArm=false; setTab('diary'); renderEditor(true);
   setTimeout(()=>$('editor').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}),60);
 });
@@ -1777,7 +1781,7 @@ function comboOpen(inp){
   Combo.el=inp; Combo.typed=false; comboRender();
 }
 function comboRender(){
-  const inp=Combo.el; if(!inp) return; const dl=document.getElementById(inp.dataset.list); if(!dl){ comboClose(); return; }
+  const inp=Combo.el; if(!inp) return; if(!inp.isConnected){ comboClose(); return; } const dl=document.getElementById(inp.dataset.list); if(!dl){ comboClose(); return; }
   const all=[...dl.options].map(o=>o.value), q=inp.value.trim().toLowerCase(), cur=inp.value.trim();
   Combo.items = Combo.typed && q ? all.filter(v=>v.toLowerCase().includes(q)) : all;
   if(!Combo.items.length){ Combo.box.hidden=true; return; }
@@ -1846,7 +1850,7 @@ function openTrade(id){ const t=S.trades.find(x=>x.id===id); if(!t) return; S.dr
 $('tradeCards').addEventListener('click',e=>{ const c=e.target.closest('.tcard[data-id]'); if(c) openTrade(c.dataset.id); });
 $('tradeBody').addEventListener('click',e=>{ const tr=e.target.closest('tr[data-id]'); if(tr) openTrade(tr.dataset.id); });
 $('tradeBody').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const tr=e.target.closest('tr[data-id]'); if(tr) openTrade(tr.dataset.id); } });
-$('newTrade').addEventListener('click',()=>{ S.draft=newTrade(); S.delArm=false; renderEditor(true); renderTrades(); $('editor').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}); setTimeout(()=>$('ed-coin')&&$('ed-coin').focus({preventScroll:true}),350); });
+$('newTrade').addEventListener('click',()=>{ S.draft=newTrade(MODE==='fx' ? {market:'fx', conv:'usd', contract:100000, pip:0.0001, leverage:100, fee:0, commLot:num('fxComm')||0, exchange:$('exch').value} : {market:'crypto', exchange:$('exch').value}); S.delArm=false; renderEditor(true); renderTrades(); $('editor').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}); setTimeout(()=>$('ed-coin')&&$('ed-coin').focus({preventScroll:true}),350); });
 
 /* =================== дисциплина =================== */
 const ERR_TAGS=['FOMO','Сдвинул стоп','Вход без сетапа','Отыгрыш','Пересидел','Рано закрыл','Большой объём','Без стопа'];
@@ -2364,7 +2368,28 @@ function updateMobileBars(){
 window.addEventListener('resize',updateMobileBars);
 
 /* =================== editor =================== */
+/* ---- форекс в дневнике: объём в лотах, маржа и комиссия считаются сами ---- */
+const kOf = d => d.conv==='mul'&&pnum(d.rate)>0 ? pnum(d.rate) : d.conv==='div'&&pnum(d.rate)>0 ? 1/pnum(d.rate) : 1;
+function fxUnitUsd(d, price){ return d.conv==='inv' ? 1 : price*kOf(d); }   // сколько USD стоит 1 единица инструмента
+function fxApplySpec(d){
+  const sp=fxSpec(d.coin); if(!sp) return false; const pr=FX_PRESETS[sp.t]||FX_PRESETS.usdq;
+  d.conv=pr.conv; d.contract=pr.contract||100000; d.pip=sp.pip||pr.pip||0.0001;
+  d.rate = (pr.conv==='mul'||pr.conv==='div') ? (rateFor(sp.rp) || pr.rateDef) : null; d.ratePair=sp.rp||'';
+  if(!d.category) d.category = /^(XAU|XAG|XPT|XPD)/.test(d.coin)?'Металлы' : /^(UKOIL|USOIL|BRENT|WTI|XNG)/.test(d.coin)?'Нефть и газ' : ['idx','ger','idxgbp','idxjpy'].includes(sp.t)?'Индексы' : sp.t==='cfd'?'Крипта' : 'Форекс';
+  return true;
+}
+function fxSyncDraft(d){
+  if(d.market!=='fx') return;
+  const L=pnum(d.leverage)>0?pnum(d.leverage):1, cs=pnum(d.contract)||100000;
+  (d.entries||[]).forEach(e=>{ const p=pnum(e.price), lots=pnum(e.lots);
+    if(e.lots!=null && e.lots!=='' ){ e.margin = lots>0&&p>0 ? String(+(lots*cs*fxUnitUsd(d,p)/L).toFixed(4)) : ''; } });
+  const cl=pnum(d.commLot);
+  if(d.commLot!=null && d.commLot!==''){ const p=pnum(d.entries&&d.entries[0]&&d.entries[0].price); d.fee = cl>0&&p>0 ? +((cl/2)/(cs*fxUnitUsd(d,p))*100).toFixed(6) : 0; }
+}
+function lotsOf(d,e){ if(e.lots!=null && e.lots!=='') return e.lots; const m=pnum(e.margin), p=pnum(e.price), L=pnum(d.leverage)>0?pnum(d.leverage):1, cs=pnum(d.contract)||100000;
+  return m>0&&p>0 ? String(+(m*L/(cs*fxUnitUsd(d,p))).toFixed(2)) : ''; }
 function renderEditor(opening){
+  if(typeof comboClose==='function' && Combo.el && $('editor').contains(Combo.el)) comboClose();
   const ed=$('editor'), d=S.draft;
   if(!d){ ed.hidden=true; ed.innerHTML=''; updateMobileBars(); return; }
   setTimeout(updateMobileBars,0);
@@ -2373,6 +2398,7 @@ function renderEditor(opening){
   const plan = d.plan ? `<span class="tag info">План: ${esc(d.plan.verdict)} · ММ ${d.plan.score}/100${d.plan.rr?` · 1:${fmt(d.plan.rr,2)}`:''}${d.prob?` · ${d.prob}%`:''}</span>` : '';
   ed.innerHTML=`
     <div class="phead" style="margin:0"><h2>${d.id?'Сделка':'Новая сделка'}</h2>${plan}</div>
+    <div class="seg modeseg" id="ed-market" role="group" aria-label="Рынок" style="margin:4px 0 2px"><button type="button" data-m="crypto" class="${d.market!=='fx'?'on':''}">Крипта</button><button type="button" data-m="fx" class="${d.market==='fx'?'on':''}">Форекс / металлы / индексы</button></div>
     <div class="eg">
       <div class="f"><label for="ed-coin">${d.market==='fx'?'Инструмент':'Монета'}</label><input id="ed-coin" data-k="coin" list="${d.market==='fx'?'fxSymList':'coinList'}" value="${esc(d.coin)}" placeholder="${d.market==='fx'?'EURUSD':'ETHUSDT'}" autocapitalize="characters"></div>
       <div class="f"><label for="ed-category">Категория</label><input id="ed-category" data-k="category" list="catList" value="${esc(d.category)}" placeholder="Свинг"></div>
@@ -2382,15 +2408,19 @@ function renderEditor(opening){
       <div class="f"><span class="lbl">Направление</span><div class="seg" id="ed-side">
         <button type="button" data-side="long" class="${d.side!=='short'?'on long':''}">LONG</button><button type="button" data-side="short" class="${d.side==='short'?'on short':''}">SHORT</button></div></div>
       <div class="f"><label for="ed-leverage">Плечо</label><div class="inp"><input id="ed-leverage" data-k="leverage" inputmode="decimal" value="${esc(d.leverage)}"><span>x</span></div></div>
-      <div class="f"><label for="ed-fee">Комиссия</label><div class="inp"><input id="ed-fee" data-k="fee" inputmode="decimal" value="${esc(d.fee)}"><span>%</span></div></div>
+      ${d.market==='fx'
+        ? `<div class="f"><label for="ed-commLot">Комиссия за лот</label><div class="inp"><input id="ed-commLot" data-k="commLot" inputmode="decimal" value="${esc(d.commLot??'')}" placeholder="0"><span>$</span></div></div>
+      <div class="f"><label for="ed-contract">1 лот =</label><div class="inp"><input id="ed-contract" data-k="contract" inputmode="decimal" value="${esc(d.contract??100000)}"><span>ед.</span></div></div>
+      ${d.conv==='mul'||d.conv==='div'?`<div class="f"><label for="ed-rate">Курс ${esc(d.ratePair||(d.conv==='div'?'USD/валюта':'валюта/USD'))}</label><input id="ed-rate" data-k="rate" inputmode="decimal" value="${esc(d.rate??'')}"></div>`:''}`
+        : `<div class="f"><label for="ed-fee">Комиссия</label><div class="inp"><input id="ed-fee" data-k="fee" inputmode="decimal" value="${esc(d.fee)}"><span>%</span></div></div>`}
       <div class="f"><label for="ed-stop">Стоп-лосс${!d.id&&rules().requireStop?' *':''}</label><input id="ed-stop" data-k="stop" inputmode="decimal" value="${esc(d.stop)}"></div>
       <div class="f"><label for="ed-tp">Тейк-профит</label><input id="ed-tp" data-k="tp" inputmode="decimal" value="${esc(d.tp)}"></div>
-      <div class="f"><label for="ed-funding">Фандинг</label><div class="inp"><input id="ed-funding" data-k="funding" inputmode="decimal" value="${esc(d.funding)}" placeholder="0"><span>USDT</span></div><span class="hint">+ получили, − заплатили</span></div>
+      <div class="f"><label for="ed-funding">${d.market==='fx'?'Своп':'Фандинг'}</label><div class="inp"><input id="ed-funding" data-k="funding" inputmode="decimal" value="${esc(d.funding)}" placeholder="0"><span>${d.market==='fx'?'USD':'USDT'}</span></div><span class="hint">+ получили, − заплатили</span></div>
     </div>
 
     <div class="legs">
       <h3>Входы и усреднения <button type="button" class="link" id="addEntry">+ Усреднение</button></h3>
-      <div class="leg leghead"><span></span><span>Цена</span><span>Маржа, USDT</span><span>Дата</span><span style="text-align:right">${d.market==='fx'?'Объём':'Монет'}</span><span></span></div>
+      <div class="leg leghead"><span></span><span>Цена</span><span>${d.market==='fx'?'Объём, лотов':'Маржа, USDT'}</span><span>Дата</span><span style="text-align:right">${d.market==='fx'?'Маржа':'Монет'}</span><span></span></div>
       <div id="entryRows"></div>
     </div>
 
@@ -2431,10 +2461,15 @@ function renderEditor(opening){
   ed.querySelectorAll('[data-scale]').forEach(sc=>sc.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const k=sc.dataset.scale, v=+b.dataset.v;
     d[k] = d[k]===v ? null : v; sc.querySelectorAll('button').forEach(x=>x.classList.toggle('on', +x.dataset.v===d[k])); }));
   $('ed-stop').addEventListener('input',()=>$('ed-stop').classList.remove('err'));
+  $('ed-market').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const m=b.dataset.m; if((d.market==='fx'?'fx':'crypto')===m) return;
+    if(m==='fx'){ d.market='fx'; if(!fxApplySpec(d)){ if(/USDT$/.test(d.coin||'')) d.coin=''; d.conv='usd'; d.contract=100000; d.pip=0.0001; } if(!(pnum(d.leverage)>5)) d.leverage=100; if(d.commLot==null) d.commLot=''; if(!d.exchange || CRYPTO_EX.has(d.exchange)) d.exchange=''; }
+    else { d.market='crypto'; ['conv','rate','contract','pip','commLot','ratePair'].forEach(k=>delete d[k]); (d.entries||[]).forEach(x=>delete x.lots); if(d.coin && !/USDT$/.test(d.coin)) d.coin=''; }
+    renderEditor(); });
+  $('ed-coin').addEventListener('change',()=>{ d.coin=$('ed-coin').value.trim().toUpperCase(); if(d.market==='fx'){ const hadRate=d.conv; fxApplySpec(d); fxSyncDraft(d); renderEditor(); } });
   ed.querySelectorAll('[data-k]').forEach(inp=>inp.addEventListener('input',()=>{ d[inp.dataset.k]=inp.value; renderEdSum(); }));
   $('ed-side').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; d.side=b.dataset.side;
     $('ed-side').querySelectorAll('button').forEach(x=>x.className= x.dataset.side===d.side ? 'on '+d.side : ''); renderEdSum(); });
-  $('addEntry').addEventListener('click',()=>{ d.entries.push({price:'',margin:'',date:today()}); renderLegs('entries'); renderEdSum(); $('en-'+(d.entries.length-1)+'-price').focus(); });
+  $('addEntry').addEventListener('click',()=>{ d.entries.push(d.market==='fx'?{price:'',lots:'',margin:'',date:today()}:{price:'',margin:'',date:today()}); renderLegs('entries'); renderEdSum(); $('en-'+(d.entries.length-1)+'-price').focus(); });
   $('addExit').addEventListener('click',()=>{ const c=tradeCalc(d); const left=Math.max(0, Math.round((100-c.closedPct)*100)/100); d.exits.push({price:'',pct: left?String(left):'',date:today()}); renderLegs('exits'); renderEdSum(); $('ex-'+(d.exits.length-1)+'-price').focus(); });
   $('edSave').addEventListener('click',saveDraft);
   if($('edChart')) $('edChart').addEventListener('click',()=>{ const sym=d.coin; setTab('chart'); setTimeout(()=>openChart(sym),30); });
@@ -2447,7 +2482,9 @@ function renderLegs(added){
   $('entryRows').innerHTML=d.entries.map((e,i)=>`<div class="leg ${added==='entries'&&i===d.entries.length-1?'new':''}" style="margin-bottom:8px">
     <span class="n">${i===0?'Вход':'+'+i}</span>
     <input class="cp" id="en-${i}-price" data-leg="entries" data-i="${i}" data-f="price" inputmode="decimal" placeholder="Цена" aria-label="Цена входа ${i+1}" value="${esc(e.price)}">
-    <input class="cm" id="en-${i}-margin" data-leg="entries" data-i="${i}" data-f="margin" inputmode="decimal" placeholder="Маржа" aria-label="Маржа ${i+1}" value="${esc(e.margin)}">
+    ${d.market==='fx'
+      ? `<input class="cm" id="en-${i}-lots" data-leg="entries" data-i="${i}" data-f="lots" inputmode="decimal" placeholder="Лоты" aria-label="Лоты ${i+1}" value="${esc(lotsOf(d,e))}">`
+      : `<input class="cm" id="en-${i}-margin" data-leg="entries" data-i="${i}" data-f="margin" inputmode="decimal" placeholder="Маржа" aria-label="Маржа ${i+1}" value="${esc(e.margin)}">`}
     <input class="cd" id="en-${i}-date" type="date" data-leg="entries" data-i="${i}" data-f="date" aria-label="Дата входа ${i+1}" value="${esc(e.date)}">
     <span class="res" id="en-${i}-res"></span>
     ${d.entries.length>1?`<button type="button" class="x" data-rm="entries" data-i="${i}" aria-label="Убрать вход">×</button>`:'<span class="xs"></span>'}
@@ -2464,12 +2501,13 @@ function renderLegs(added){
   document.querySelectorAll('#entryRows [data-rm],#exitRows [data-rm]').forEach(b=>b.addEventListener('click',()=>{ d[b.dataset.rm].splice(+b.dataset.i,1); renderLegs(); renderEdSum(); }));
 }
 function renderEdSum(){
+  fxSyncDraft(S.draft);
   const d=S.draft, c=tradeCalc(d), pd=priceDec(c.avg), start=pnum(S.profile.startDeposit)||0;
   // депозит на момент открытия этой сделки: сделки, открытые раньше, и пополнения/выводы до этой даты
   const tkey=t=>(t.date||'')+' '+(t.time||'')+' '+String(t.createdAt||0).padStart(15,'0');
   const myKey=tkey(d), before=S.trades.filter(t=>t.id!==d.id && tkey(t)<myKey);
   const balWithout=ledger(start, before, cashList().filter(m=>(m.date||'')<=(d.date||'9999'))).balance;
-  d.entries.forEach((e,i)=>{ const m=pnum(e.margin), p=pnum(e.price), el=$('en-'+i+'-res'); if(!el) return; const u = d.conv==='inv' ? m*c.L : m*c.L/(p*(d.conv==='mul'&&pnum(d.rate)>0?pnum(d.rate):d.conv==='div'&&pnum(d.rate)>0?1/pnum(d.rate):1)), cs=pnum(d.contract); el.textContent = m>0&&p>0 ? (d.market==='fx'&&cs>0 ? fmt(u/cs,2)+' лот' : fmt(u, u<1?5:3)) : ''; });
+  d.entries.forEach((e,i)=>{ const m=pnum(e.margin), p=pnum(e.price), el=$('en-'+i+'-res'); if(!el) return; const u = d.conv==='inv' ? m*c.L : m*c.L/(p*(d.conv==='mul'&&pnum(d.rate)>0?pnum(d.rate):d.conv==='div'&&pnum(d.rate)>0?1/pnum(d.rate):1)), cs=pnum(d.contract); el.textContent = m>0&&p>0 ? (d.market==='fx' ? '$'+fmt(m,2) : fmt(u, u<1?5:3)) : ''; });
   d.exits.forEach((x,i)=>{ const l=c.legs[i], el=$('ex-'+i+'-res'); if(!el) return; el.textContent = l&&l.valid ? sgn(l.net) : ''; el.className='res '+(l&&l.valid?(l.net>=0?'pos':'neg'):''); });
   $('closedBar').style.width=Math.min(100,c.closedPct)+'%';
   $('closedBar').style.background = c.over ? 'var(--bad)' : c.closedPct>=99.99 ? 'var(--good)' : 'var(--accent)';
@@ -2493,11 +2531,12 @@ function edMsg(t, err){ const m=$('edMsg'); if(!m) return; m.textContent=t; m.cl
 
 /* =================== persistence =================== */
 function cleanTrade(d){
-  const keep=['coin','category','exchange','side','date','time','setup','tags','emo','planScore','market','conv','rate','contract','pip','tps','be','leverage','fee','stop','tp','funding','prob','comment','plan'];
+  fxSyncDraft(d);
+  const keep=['coin','category','exchange','side','date','time','setup','tags','emo','planScore','market','conv','rate','ratePair','commLot','contract','pip','tps','be','leverage','fee','stop','tp','funding','prob','comment','plan'];
   const o={}; keep.forEach(k=>o[k]= d[k]===undefined ? null : d[k]);
   o.coin=String(o.coin||'').trim().toUpperCase(); o.category=String(o.category||'').trim(); o.exchange=String(o.exchange||'').trim(); o.setup=String(o.setup||'').trim();
   o.tags=Array.isArray(d.tags)?d.tags.slice():[];
-  o.entries=(d.entries||[]).filter(e=>pnum(e.price)>0||pnum(e.margin)>0).map(e=>({price:String(e.price),margin:String(e.margin),date:e.date||''}));
+  o.entries=(d.entries||[]).filter(e=>pnum(e.price)>0||pnum(e.margin)>0).map(e=>Object.assign({price:String(e.price),margin:String(e.margin),date:e.date||''}, d.market==='fx'&&e.lots!=null&&e.lots!==''?{lots:String(e.lots)}:{}));
   o.exits=(d.exits||[]).filter(x=>pnum(x.price)>0||pnum(x.pct)>0).map(x=>({price:String(x.price),pct:String(x.pct),date:x.date||''}));
   o.createdAt = d.createdAt || Date.now(); o.updatedAt = Date.now();
   return o;
