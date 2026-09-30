@@ -356,7 +356,7 @@ button{font:inherit}
 }
 .sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 @media (max-width:620px){.sum{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.sum>div:nth-child(13){grid-column:1/-1}
+.sum>div:last-child{grid-column:1/-1}
 .sum div{background:var(--panel-2);padding:10px 12px;display:flex;flex-direction:column;min-width:0}
 .sum span{font-size:11px;color:var(--muted)}
 .sum b{font-family:var(--f-mono);font-size:15px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
@@ -422,6 +422,15 @@ button{font:inherit}
 .prow .pu{font:700 17px var(--f-mono);text-align:right;white-space:nowrap}
 .prow .pu small{display:block;font-size:11px;font-weight:500;color:var(--muted)}
 @media (max-width:640px){.prow{grid-template-columns:1fr 1fr auto}.prow .pk.hide-m{display:none}.chsym input{width:120px}.chprice b{font-size:20px}.chwrap{height:clamp(300px,52vh,480px)}}
+/* ---- живые цены ---- */
+.ldot{display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:6px;vertical-align:middle;animation:ldot 2s ease-in-out infinite}
+@keyframes ldot{0%,100%{opacity:1}50%{opacity:.25}}
+.lv{font-family:var(--f-mono);font-weight:600}
+.lvsum{display:block;margin-top:4px;font-family:var(--f-mono);font-size:12.5px;font-weight:600}
+.sum .edlive{grid-column:1/-1;display:grid;padding:0;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border-radius:10px;overflow:hidden;margin-bottom:1px}
+.sum .edlive>div{background:var(--accent-soft);padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.edlive span{font-size:12px;color:var(--muted)} .edlive b{font-family:var(--f-mono);font-size:16px}
+@media (prefers-reduced-motion:reduce){.ldot{animation:none}}
 /* ---- выпадающие подсказки ---- */
 .combo{z-index:80;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px;overscroll-behavior:contain;animation:comboIn .14s var(--ease)}
 .combo .ci{padding:9px 10px;border-radius:7px;cursor:pointer;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -845,7 +854,7 @@ table.cmp .sh{display:none}
       <div class="stats stag" style="--i:0">
         <div class="stat"><label class="k" for="startDep">Стартовый депозит</label><input id="startDep" inputmode="decimal" value="1000"><span class="s" id="startDepS">USDT</span></div>
         <div class="stat hl"><span class="k">Текущий депозит</span><span class="v" id="d-bal">—</span><span class="s" id="d-bal-s"></span></div>
-        <div class="stat"><span class="k">Открытые позиции</span><span class="v" id="d-open">—</span><span class="s" id="d-open-s"></span></div>
+        <div class="stat"><span class="k">Открытые позиции</span><span class="v" id="d-open">—</span><span class="s" id="d-open-s"></span><span class="lvsum" id="d-open-f" hidden></span></div>
       </div>
 
       <details class="review cashbox stag" style="--i:1" id="cashBox">
@@ -1831,7 +1840,9 @@ function renderTrades(){
       <td>x${fmt(c.L,0)}</td>
       <td>${fmt(c.marginTot,2)}</td>
       <td>${fmt(Math.min(c.closedPct,100),0)}%</td>
-      <td class="${c.net>0?'pos':c.net<0?'neg':''}">${sgn(c.net)}<span class="sub">${isFinite(c.R)&&c.closedPct>0?sgn(c.R)+'R · ':''}${isFinite(c.roe)?sgn(c.roe,1)+'% ROE':''}</span></td>
+      ${c.status==='open'||c.status==='partial'
+        ? `<td><span data-live="${esc(t.id)}" data-k="main"></span><span class="sub" data-live="${esc(t.id)}" data-k="sub"></span>${c.closedPct>0?`<span class="sub">зафиксировано ${sgn(c.net)}</span>`:''}</td>`
+        : `<td class="${c.net>0?'pos':c.net<0?'neg':''}">${sgn(c.net)}<span class="sub">${isFinite(c.R)&&c.closedPct>0?sgn(c.R)+'R · ':''}${isFinite(c.roe)?sgn(c.roe,1)+'% ROE':''}</span></td>`}
       <td><span class="tag ${st[1]}">${st[0]}</span></td></tr>`;
   }).join('') : (S.trades.length?`<tr><td class="l" colspan="10">Нет сделок под этот фильтр.</td></tr>`:'');
   const cards=$('tradeCards');
@@ -1839,13 +1850,14 @@ function renderTrades(){
   cards.innerHTML = rows.length ? rows.map(({t,c},n)=>{
     const st=STATUS[c.status], sel=S.draft&&S.draft.id&&S.draft.id===t.id, pd=priceDec(c.avg), adds=(t.entries||[]).length-1;
     return `<button type="button" class="tcard ${sel?'sel':''}" data-id="${esc(t.id)}" style="--i:${n}">
-      <span class="l1"><span class="dir ${t.side==='short'?'short':'long'}">${t.side==='short'?'SHORT':'LONG'}</span><b>${esc(t.coin||'—')}</b><span class="tag ${st[1]}">${st[0]}</span></span>
-      <span class="pnl ${c.net>0?'pos':c.net<0?'neg':''}">${sgn(c.net)}</span>
+      <span class="l1"><span class="dir ${t.side==='short'?'short':'long'}">${t.side==='short'?'SHORT':'LONG'}</span><b>${esc(t.coin||'—')}</b>${c.status==='open'?'':`<span class="tag ${st[1]}">${st[0]}</span>`}</span>
+      ${c.status==='open'||c.status==='partial' ? `<span class="pnl" data-live="${esc(t.id)}" data-k="main"></span>` : `<span class="pnl ${c.net>0?'pos':c.net<0?'neg':''}">${sgn(c.net)}</span>`}
       <span class="l2">${ddmm(t.date)} · x${fmt(c.L,0)} · ${fmt(c.avg,pd)}${adds>0?' · +'+adds+' ус.':''}${t.exchange?' · '+esc(t.exchange):''}${t.category?' · '+esc(t.category):''}</span>
-      <span class="r2">${isFinite(c.roe)&&c.closedPct>0?sgn(c.roe,1)+'% ROE':''}</span>
+      ${c.status==='open'||c.status==='partial' ? `<span class="r2" data-live="${esc(t.id)}" data-k="sub"></span>` : `<span class="r2">${isFinite(c.roe)&&c.closedPct>0?sgn(c.roe,1)+'% ROE':''}</span>`}
       ${c.status!=='closed'?`<span class="bar2"><i style="width:${Math.min(100,c.closedPct)}%"></i></span>`:''}
     </button>`;
   }).join('') : (S.trades.length?'<p class="empty">Нет сделок под этот фильтр.</p>':'');
+  paintLive(); if(Date.now()-LIVE.last>8000) setTimeout(()=>liveTick(false),50);
 }
 ['fStatus','fCat','fCoin'].forEach(id=>$(id).addEventListener('input',()=>{ S.animRows=true; renderTrades(); }));
 function openTrade(id){ const t=S.trades.find(x=>x.id===id); if(!t) return; S.draft=JSON.parse(JSON.stringify(t)); if(S.draft.funding==null) S.draft.funding=''; S.delArm=false; renderEditor(true); renderTrades(); $('editor').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}); }
@@ -2135,6 +2147,78 @@ $('cardShare').addEventListener('click', async ()=>{
 function shiftMonth(n){ const [Y,M]=(S.calMonth||today().slice(0,7)).split('-').map(Number); const d=new Date(Y,M-1+n,1); S.calMonth=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; S.animCal=true; renderCalendar(); }
 $('calPrev').addEventListener('click',()=>shiftMonth(-1));
 $('calNext').addEventListener('click',()=>shiftMonth(1));
+
+
+/* =================== живые цены открытых сделок: с той биржи, где открыта сделка =================== */
+const LIVE={px:{}, busy:false, last:0};
+const TV_FX={XAUUSD:['OANDA:XAUUSD'],XAGUSD:['OANDA:XAGUSD'],XPTUSD:['OANDA:XPTUSD'],XPDUSD:['OANDA:XPDUSD'],UKOIL:['OANDA:BCOUSD','TVC:UKOIL'],BRENT:['OANDA:BCOUSD','TVC:UKOIL'],USOIL:['OANDA:WTICOUSD','TVC:USOIL'],WTI:['OANDA:WTICOUSD','TVC:USOIL'],XNGUSD:['OANDA:NATGASUSD'],
+  US30:['OANDA:US30USD','TVC:DJI'],NAS100:['OANDA:NAS100USD','NASDAQ:NDX'],US100:['OANDA:NAS100USD','NASDAQ:NDX'],SPX500:['OANDA:SPX500USD','SP:SPX'],US500:['OANDA:SPX500USD','SP:SPX'],US2000:['OANDA:US2000USD','TVC:RUT'],
+  GER40:['OANDA:DE30EUR','XETR:DAX'],DE40:['OANDA:DE30EUR','XETR:DAX'],FRA40:['OANDA:FR40EUR'],EU50:['OANDA:EU50EUR','TVC:SX5E'],UK100:['OANDA:UK100GBP','TVC:UKX'],JP225:['OANDA:JP225USD','TVC:NI225']};
+function liveSym(t){ return String(t.coin||'').toUpperCase().replace(/[\s\/\-:_]/g,'').replace(/\.P$/,''); }
+function exId(ex){ const e=String(ex||'').toLowerCase(); return e.includes('bitget')?'bitget' : e.includes('bybit')?'bybit' : e.includes('okx')?'okx' : e.includes('gate')?'gate' : e.includes('binance')?'binance' : ''; }
+const EX_NAME={binance:'Binance',bitget:'Bitget',bybit:'Bybit',okx:'OKX',gate:'Gate',tv:'рынок'};
+function liveKey(t){ const s=liveSym(t); if(t.market==='fx' && !/(BTC|ETH|SOL|XRP|LTC|BNB|DOGE|ADA)USD$/.test(s)) return 'fx:'+s; return (exId(t.exchange)||'auto')+':'+normSym(t.coin); }
+const PX_FETCH={
+  binance: async s=>{ try{ const j=await getJSON(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${s}`); if(+j.markPrice>0) return +j.markPrice; }catch(e){} const j=await getJSON(`https://api.binance.com/api/v3/ticker/price?symbol=${s}`); return +j.price; },
+  bitget: async s=>{ const j=await getJSON(`https://api.bitget.com/api/v2/mix/market/symbol-price?symbol=${s}&productType=usdt-futures`); return +((j.data||[])[0]||{}).markPrice; },
+  okx: async s=>{ const j=await getJSON(`https://www.okx.com/api/v5/public/mark-price?instType=SWAP&instId=${s.replace(/USDT$/,'')}-USDT-SWAP`); return +((j.data||[])[0]||{}).markPx; },
+  bybit: async s=>{ const j=await getJSON(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${s}`); return +(((j.result||{}).list||[])[0]||{}).markPrice; },
+  gate: async s=>{ const j=await getJSON(`https://api.gateio.ws/api/v4/futures/usdt/tickers?contract=${s.replace(/USDT$/,'')}_USDT`); return +((j||[])[0]||{}).mark_price; }
+};
+async function getJSON(u){ const ctl=new AbortController(), tm=setTimeout(()=>ctl.abort(),6000); try{ const r=await fetch(u,{signal:ctl.signal, cache:'no-store'}); if(!r.ok) throw new Error(r.status); return await r.json(); } finally{ clearTimeout(tm); } }
+async function fetchCrypto(key){
+  const [ex,s]=key.split(':'), order=[...new Set([ex,'binance','bitget','okx','bybit'].filter(x=>PX_FETCH[x]))];
+  for(const x of order){ try{ const v=await PX_FETCH[x](s); if(v>0) return {px:v, src:x, own:x===ex}; }catch(e){} }
+  return null;
+}
+async function fetchFx(syms){
+  const map={}, tickers=[];
+  syms.forEach(s=>{ const c = TV_FX[s] || (/^[A-Z]{6}$/.test(s) ? ['FX:'+s,'FX_IDC:'+s,'OANDA:'+s] : []); map[s]=c; tickers.push(...c); });
+  if(!tickers.length) return {};
+  const r=await fetch('https://scanner.tradingview.com/global/scan',{method:'POST',body:JSON.stringify({symbols:{tickers:[...new Set(tickers)]},columns:['close']})});
+  const j=await r.json(), got={}; (j.data||[]).forEach(x=>{ if(x.d && +x.d[0]>0) got[x.s]=+x.d[0]; });
+  const out={}; syms.forEach(s=>{ const hit=map[s].find(k=>got[k]); if(hit) out[s]={px:got[hit], src:'tv', own:false}; }); return out;
+}
+function openTrades(){ return S.trades.map(t=>({t,c:tradeCalc(t)})).filter(x=>x.c.status==='open'||x.c.status==='partial'); }
+async function liveTick(force){
+  if(LIVE.busy || (!force && (document.hidden || S.tab!=='diary'))) return;
+  const open=openTrades(); if(S.draft && S.draft.id){ const c=tradeCalc(S.draft); if((c.status==='open'||c.status==='partial') && !open.some(x=>x.t.id===S.draft.id)) open.push({t:S.draft,c}); }
+  if(!open.length) return;
+  LIVE.busy=true;
+  try{
+    const keys=[...new Set(open.map(x=>liveKey(x.t)))], fx=keys.filter(k=>k.startsWith('fx:')).map(k=>k.slice(3)), cr=keys.filter(k=>!k.startsWith('fx:'));
+    const [fxRes, ...crRes]=await Promise.all([fx.length?fetchFx(fx).catch(()=>({})):Promise.resolve({}), ...cr.map(k=>fetchCrypto(k).catch(()=>null))]);
+    const now=Date.now();
+    fx.forEach(s=>{ if(fxRes[s]) LIVE.px['fx:'+s]=Object.assign(fxRes[s],{t:now}); });
+    cr.forEach((k,i)=>{ if(crRes[i]) LIVE.px[k]=Object.assign(crRes[i],{t:now}); });
+    LIVE.last=now; paintLive();
+  } finally{ LIVE.busy=false; }
+}
+setInterval(()=>liveTick(false), 10000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) liveTick(false); });
+function floating(t,c){
+  const q0=LIVE.px[liveKey(t)]; if(!q0) return null; const px=q0.px;
+  const rem=1-Math.min(c.closedPct,100)/100, q=c.Q*rem, dir=t.side==='short'?-1:1, inv=t.conv==='inv';
+  const rt=pnum(t.rate), kx = t.conv==='mul'&&rt>0 ? rt : t.conv==='div'&&rt>0 ? 1/rt : 1;
+  let pnl = inv ? q*(px-c.avg)*dir/px : q*(px-c.avg)*dir*kx;          // как считает биржа: по цене, без комиссий
+  if(t.market==='fx') pnl += (pnum(t.funding)||0);                      // брокер показывает результат вместе со свопами
+  const margin = q*(inv?1:px*kx)/(c.L||1), roe = margin>0 ? pnl/margin*100 : NaN;
+  return {px, pnl, roe, src:q0.src, own:q0.own, age:Date.now()-q0.t};
+}
+function liveSrcText(f){ return f.src==='tv' ? 'котировка рынка' : 'цена '+EX_NAME[f.src]+(f.own?'':' (биржи нет в источниках)'); }
+function paintLive(){
+  let tot=0, n=0;
+  document.querySelectorAll('[data-live]').forEach(el=>{
+    const t=S.trades.find(x=>x.id===el.dataset.live); if(!t) return; const c=tradeCalc(t), f=floating(t,c), kind=el.dataset.k;
+    if(!f){ if(kind==='main') el.innerHTML='<span class="hint">ждём цену…</span>'; else el.textContent=''; return; }
+    if(kind==='main'){ el.className='lv '+(f.pnl>0?'pos':f.pnl<0?'neg':''); el.innerHTML=`<i class="ldot"></i>${sgn(f.pnl)}`; }
+    else if(kind==='sub'){ el.textContent=`${isFinite(f.roe)?sgn(f.roe,1)+'% · ':''}${fmt(f.px,Math.max(priceDec(f.px),Math.min(6,(String(f.px).split('.')[1]||'').length)))}`; }
+  });
+  openTrades().forEach(({t,c})=>{ const f=floating(t,c); if(f){ tot+=f.pnl; n++; } });
+  const el=$('d-open-f'); if(el){ el.hidden=!n; el.className='lvsum '+(tot>0?'pos':tot<0?'neg':''); el.innerHTML = n ? `<i class="ldot"></i>сейчас ${tot>0?'в плюсе':'в минусе'} ${sgn(tot)}` : ''; }
+  const ed=$('edLive'); if(ed && S.draft){ const c=tradeCalc(S.draft), f=(c.status==='open'||c.status==='partial') ? floating(S.draft,c) : null;
+    ed.hidden=!f; if(f) ed.innerHTML=`<div><span>Текущая цена · ${esc(liveSrcText(f))}</span><b>${fmt(f.px,Math.max(priceDec(f.px),Math.min(6,(String(f.px).split('.')[1]||'').length)))}</b></div><div><span>Сейчас ${f.pnl>=0?'в плюсе':'в минусе'}</span><b class="${f.pnl>0?'pos':f.pnl<0?'neg':''}">${sgn(f.pnl)} · ${isFinite(f.roe)?sgn(f.roe,1)+'%':'—'}</b></div>`; }
+}
 
 /* =================== пополнения и выводы =================== */
 let cashType='in', cashNewId=null;
@@ -2515,6 +2599,7 @@ function renderEdSum(){
   $('closedBar').style.background = c.over ? 'var(--bad)' : c.closedPct>=99.99 ? 'var(--good)' : 'var(--accent)';
   const st=STATUS[c.status];
   $('edSum').innerHTML=`
+    <div class="edlive" id="edLive" hidden></div>
     <div><span>Средняя цена входа</span><b>${fmt(c.avg,pd)}</b></div>
     <div><span>Маржа / объём, USDT</span><b>${fmt(c.marginTot,2)} / ${fmt(c.notional,2)}</b></div>
     <div><span>Закрыто</span><b class="${c.over?'neg':''}">${fmt(c.closedPct,1)}%${c.over?' (больше 100%)':''}</b></div>
@@ -2528,6 +2613,7 @@ function renderEdSum(){
     <div><span>Риск по стопу</span><b>${isFinite(c.riskUsd)?'−'+fmt(c.riskUsd,2):'—'}</b></div>
     <div><span>Риск соблюдён</span><b class="${discOf(c)==='ok'?'pos':discOf(c)==='open'?'':'neg'}">${{ok:'да',over:'убыток больше плана',nostop:'стоп не указан',open:'—'}[discOf(c)]}</b></div>
     <div><span>${isFinite(c.lots)?'Объём, лотов':'Остаток позиции'}</span><b>${isFinite(c.lots)?fmt(c.lots,2)+(c.closedPct>0&&c.closedPct<100?' · осталось '+fmt(c.lots*(1-c.closedPct/100),2):''):fmt(c.Q*(1-Math.min(c.closedPct,100)/100), c.Q<1?5:3)+' монет'}</b></div>`;
+  paintLive(); if(S.draft && S.draft.id && Date.now()-LIVE.last>8000) setTimeout(()=>liveTick(true),30);
 }
 function edMsg(t, err){ const m=$('edMsg'); if(!m) return; m.textContent=t; m.className='toast'+(err?' err':''); m.hidden=false; clearTimeout(edMsg._t); if(!err) edMsg._t=setTimeout(()=>{ if(m) m.hidden=true; },1800); }
 
