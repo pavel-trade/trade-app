@@ -748,6 +748,7 @@ table.cmp .sh{display:none}
           <div class="f"><label for="cap">Макс. маржа от депо</label><div class="inp"><input id="cap" inputmode="decimal" value="25"><span>%</span></div></div>
           <div class="f only-crypto"><label for="fee">Комиссия (тейкер)</label><div class="inp"><input id="fee" inputmode="decimal" value="0.05"><span>%</span></div></div>
           <div class="f only-fx" hidden><label for="fxComm">Комиссия за лот</label><div class="inp"><input id="fxComm" inputmode="decimal" value="0" placeholder="0"><span>$</span></div></div>
+          <div class="f only-fx" hidden><label for="fxSwap">Свопы (если уже есть)</label><div class="inp"><input id="fxSwap" inputmode="text" placeholder="0, например −1,94"><span>$</span></div></div>
           <div class="f full only-fx" hidden><label for="fxInst">Тип инструмента</label>
             <select id="fxInst"><option value="usdq">EURUSD, GBPUSD, AUDUSD… (котировка в USD)</option><option value="usdb">USDCHF, USDCAD… (USD в начале)</option><option value="jpy">USDJPY</option><option value="jpyx">EURJPY, GBPJPY… (кроссы с JPY)</option><option value="cross">Кроссы с EUR/GBP/AUD/NZD в конце: EURGBP, GBPAUD…</option><option value="crossd">Кроссы с CHF/CAD и др. в конце: EURCHF, AUDCAD, EURTRY…</option><option value="xau">Золото XAUUSD</option><option value="xag">Серебро XAGUSD</option><option value="xpt">Платина / палладий XPTUSD, XPDUSD</option><option value="oil">Нефть Brent / WTI</option><option value="gas">Природный газ XNGUSD</option><option value="idx">Индексы в USD: US30, NAS100, SPX500</option><option value="cfd">Криптовалюта у брокера: BTCUSD, ETHUSD</option><option value="ger">Индексы в EUR: GER40, FRA40, EU50</option><option value="idxgbp">Индекс UK100 (в GBP)</option><option value="idxjpy">Индекс JP225 (в JPY)</option><option value="custom">Свой инструмент (котировка в USD)</option></select></div>
           <div class="f only-fx" hidden><label for="fxContract">Размер лота (1 лот =)</label><div class="inp"><input id="fxContract" inputmode="decimal" value="100000"><span>ед.</span></div></div>
@@ -1220,11 +1221,12 @@ function calcForex(o){
   const lots = manualQty ? Math.max(0.01, Math.round(o.lotsOv*100)/100) : lotsAuto;
   const tooSmall = !manualQty && lotsRaw<0.01;
   const qty=lots*contract, comm=cm*lots;
-  const riskUsd = (inv ? qty*Math.abs(E-Sp)/Sp : qty*Math.abs(E-Sp)*k) + comm;
+  const swap = isFinite(o.swap) ? o.swap : 0;   // накопленный своп: минус — заплатили, плюс — получили
+  const riskUsd = (inv ? qty*Math.abs(E-Sp)/Sp : qty*Math.abs(E-Sp)*k) + comm - swap;
   const notional = inv ? qty : qty*E*k;
   const tpValid = T>0 && (long ? T>E : T<E);
   const tpPips = tpValid ? Math.abs(T-E)/pip : NaN;
-  const profitUsd = tpValid ? (inv ? qty*Math.abs(T-E)/T : qty*Math.abs(T-E)*k) - comm : NaN;
+  const profitUsd = tpValid ? (inv ? qty*Math.abs(T-E)/T : qty*Math.abs(T-E)*k) - comm + swap : NaN;
   const rr = tpValid ? profitUsd/riskUsd : NaN;
   const ev = tpValid ? p*profitUsd - (1-p)*riskUsd : NaN;
   const evR = tpValid ? p*rr - (1-p) : NaN;
@@ -1234,14 +1236,14 @@ function calcForex(o){
   const rec = rows.find(x=>x.st==='ok') || null;
   const picked = pick ? rows.find(x=>x.L===pick) : null;
   const feePct = cm>0 ? (cm/2)/(inv?contract:contract*E*k)*100 : 0;   // комиссия за лот → % от объёма для дневника
-  return {ok:true,fx:true,D,r:riskUsd/D*100,rPlan:r,feePct,E,S:Sp,T,p,long,stopPct:Math.abs(E-Sp)/E*100,riskUsd,riskPlan,notional,qty,lots,lotsRaw,lotsAuto,manualQty,tooSmall,pipsStop,tpPips,pipValLot,contract,pip,conv,comm,k,rate,
+  return {ok:true,fx:true,D,r:riskUsd/D*100,rPlan:r,feePct,E,S:Sp,T,p,long,stopPct:Math.abs(E-Sp)/E*100,riskUsd,riskPlan,swap,notional,qty,lots,lotsRaw,lotsAuto,manualQty,tooSmall,pipsStop,tpPips,pipValLot,contract,pip,conv,comm,k,rate,
           tpValid,tpPct:tpValid?Math.abs(T-E)/E*100:NaN,profitUsd,rr,ev,evR,beWin,rows,rec,use:picked||rec,manual:!!picked,capUsd,feeStopPct:0};
 }
 
 /* Несколько тейков: прибыль = сумма по каждому тейку своей доли позиции (с комиссиями входа и выхода этой доли).
    Безубыток после TP1: TP1 закрывает свою долю, остаток выходит по цене входа (минус комиссии остатка). */
 function tpLegProfit(c, T, w){
-  if(c.fx){ const q=c.qty*w, inv=c.conv==='inv'; return (inv ? q*Math.abs(T-c.E)/T : q*Math.abs(T-c.E)*(c.k||1)) - c.comm*w; }
+  if(c.fx){ const q=c.qty*w, inv=c.conv==='inv'; return (inv ? q*Math.abs(T-c.E)/T : q*Math.abs(T-c.E)*(c.k||1)) - c.comm*w + (c.swap||0)*w; }
   const f=(c.feePct||0)/100; return c.notional*w*(Math.abs(T-c.E)/c.E - f*(1+T/c.E));
 }
 function applyTps(c, o){
@@ -1387,7 +1389,7 @@ $('fxSym').addEventListener('change',()=>{
   const v=$('fxSym').value;
   if(v==='__other'){ $('ticker').hidden=false; $('ticker').value=''; $('ticker').focus(); return; }
   $('ticker').value=v; $('ticker').hidden=true; lsSet('poscalc.tk.fx', v);
-  ['entry','stop','tp','tp1','tp2','tp3','qtyOv'].forEach(id=>$(id).value='');   // цены другого инструмента не подходят
+  ['entry','stop','tp','tp1','tp2','tp3','qtyOv','fxSwap'].forEach(id=>$(id).value='');   // цены другого инструмента не подходят
   fxGuess(v,true); renderCalc(); saveCalc();
 });
 function fxSpec(sym){
@@ -1443,7 +1445,7 @@ function fxParams(){
   const needRate = pr.conv==='mul' || pr.conv==='div';
   $('fxRateWrap').hidden = MODE!=='fx' || !needRate; if(needRate){ $('fxRateLbl').textContent = RATE_PAIR ? 'Курс '+RATE_PAIR+' (для пересчёта в USD)' : pr.rateLbl; if(!$('fxRate').value) $('fxRate').value=rateFor(RATE_PAIR)||pr.rateDef;
     $('fxRateHint').textContent = $('fxRate').dataset.auto==='1' && FX_RATES && RATE_PAIR ? 'Курс подставлен автоматически, обновляется раз в сутки. Можно поправить вручную.' : 'Впишите текущий курс, от него зависит стоимость пункта в USD.'; }
-  return {contract:num('fxContract'), pip:num('fxPip'), conv:pr.conv, rate: needRate ? num('fxRate') : 1, commLot: num('fxComm')||0, lotsOv: num('qtyOv')};
+  return {contract:num('fxContract'), pip:num('fxPip'), conv:pr.conv, rate: needRate ? num('fxRate') : 1, commLot: num('fxComm')||0, swap: pnum(String($('fxSwap').value).replace('−','-'))||0, lotsOv: num('qtyOv')};
 }
 function applyMode(){
   document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.toggle('on', b.dataset.m===MODE));
@@ -1585,7 +1587,7 @@ $('modeSeg').addEventListener('click',e=>{ const b=e.target.closest('button'); i
   ['entry','stop','tp','tp1','tp2','tp3','qtyOv'].forEach(id=>$(id).value='');   // цены другого рынка не подходят
   applyMode(); renderCalc(); saveCalc(); });
 $('qtyReset').addEventListener('click',()=>{ $('qtyOv').value=''; renderCalc(); $('qtyOv').focus(); });
-$('clear').addEventListener('click',()=>{ ['entry','stop','tp','tp1','tp2','tp3','comment','qtyOv'].forEach(id=>$(id).value=''); S.levPick=null; renderCalc(); $('entry').focus(); });
+$('clear').addEventListener('click',()=>{ ['entry','stop','tp','tp1','tp2','tp3','comment','qtyOv','fxSwap'].forEach(id=>$(id).value=''); S.levPick=null; renderCalc(); $('entry').focus(); });
 $('form').addEventListener('submit',e=>{
   e.preventDefault();
   const L=lastCalc; if(!L){ $('entry').focus(); return; }
@@ -1597,7 +1599,7 @@ $('form').addEventListener('submit',e=>{
     leverage:lev, fee:c.feePct, stop:String(c.S), tp:c.tpValid?String(c.T):'', prob:Math.round(c.p*100), comment:$('comment').value.trim(),
     plan:{score:L.s.score, verdict:L.badge, riskPct:c.r, rr: isFinite(c.rr)?+c.rr.toFixed(2):null},
     entries:[{price:String(c.E), margin:(c.notional/lev).toFixed(2), date:today()}],
-  }), c.fx ? {market:'fx', conv:c.conv, rate:(c.conv==='mul'||c.conv==='div')?c.rate:null, ratePair:RATE_PAIR||'', commLot:c.comm&&c.lots?+(c.comm/c.lots).toFixed(2):0, contract:c.contract, pip:c.pip, fee:+c.feePct.toFixed(6)} : {market:'crypto'});
+  }), c.fx ? {market:'fx', conv:c.conv, rate:(c.conv==='mul'||c.conv==='div')?c.rate:null, ratePair:RATE_PAIR||'', commLot:c.comm&&c.lots?+(c.comm/c.lots).toFixed(2):0, funding:c.swap?String(+c.swap.toFixed(2)):'', contract:c.contract, pip:c.pip, fee:+c.feePct.toFixed(6)} : {market:'crypto'});
   S.delArm=false; setTab('diary'); renderEditor(true);
   setTimeout(()=>$('editor').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}),60);
 });
