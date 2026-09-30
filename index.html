@@ -842,13 +842,13 @@ table.cmp .sh{display:none}
   <section id="view-diary" class="view" hidden>
     <div class="col">
       <div class="stats stag" style="--i:0">
-        <div class="stat"><label class="k" for="startDep">Стартовый депозит</label><input id="startDep" inputmode="decimal" value="1000"><span class="s">USDT</span></div>
+        <div class="stat"><label class="k" for="startDep">Стартовый депозит</label><input id="startDep" inputmode="decimal" value="1000"><span class="s" id="startDepS">USDT</span></div>
         <div class="stat hl"><span class="k">Текущий депозит</span><span class="v" id="d-bal">—</span><span class="s" id="d-bal-s"></span></div>
         <div class="stat"><span class="k">Открытые позиции</span><span class="v" id="d-open">—</span><span class="s" id="d-open-s"></span></div>
       </div>
 
       <details class="review cashbox stag" style="--i:1" id="cashBox">
-        <summary>Пополнения и выводы <span class="hint" id="cashSum">не влияют на доходность</span></summary>
+        <summary>Пополнения и выводы <span class="hint" id="cashSum">добавляются в стартовый депозит</span></summary>
         <div class="rv">
           <div class="cashform">
             <div class="seg" id="cashType"><button type="button" data-t="in" class="on">Пополнение</button><button type="button" data-t="out">Вывод</button></div>
@@ -1132,7 +1132,7 @@ function tradeCalc(t){
 function cashList(){ try{ return (S && S.profile && Array.isArray(S.profile.cash)) ? S.profile.cash : []; }catch(e){ return []; } }
 function ledger(start, trades, cash){
   const ev=[];
-  (cash || cashList()).forEach(m=>{ const a=pnum(m.amount); if(isFinite(a) && a!==0) ev.push({d:m.date||'', v:a, k:-1, cash:a, note:m.note||''}); });
+  (cash || cashList()).forEach(m=>{ /* учтённые в стартовом депозите не считаем второй раз */ if(m.inStart) return; const a=pnum(m.amount); if(isFinite(a) && a!==0) ev.push({d:m.date||'', v:a, k:-1, cash:a, note:m.note||''}); });
   trades.forEach(t=>{
     const c=tradeCalc(t), f=(pnum(t.fee)||0)/100;
     (t.entries||[]).forEach(e=>{ const m=pnum(e.margin), p=pnum(e.price); if(m>0&&p>0) ev.push({d:e.date||t.date||'', v:-m*c.L*f, k:0}); });
@@ -1617,7 +1617,8 @@ function renderDiaryStats(){
   const openMargin=openL.reduce((a,x)=>a+x.c.marginTot*(1-Math.min(x.c.closedPct,100)/100),0);
   const fees=calcs.reduce((a,x)=>a+x.c.fees,0), funding=calcs.reduce((a,x)=>a+x.c.funding,0);
 
-  if(document.activeElement!==$('startDep')) $('startDep').value = S.profile.startDeposit;
+  if(document.activeElement!==$('startDep')) $('startDep').value = +(+S.profile.startDeposit).toFixed(2);
+  { const cs=cashList().filter(m=>m.inStart).reduce((a,m)=>a+pnum(m.amount),0); $('startDepS').textContent = Math.abs(cs)>1e-9 ? `USDT · из них пополнения и выводы ${sgn(cs)}` : 'USDT'; }
   tween($('d-bal'), bal, x=>fmt(x,2)); $('d-bal-s').textContent=`торговля ${sgn(pnl)} · ${base>0?sgn(pnl/base*100,1)+'%':'—'}${L.netCash?` · ${L.netCash>0?'пополнения':'выводы'} ${sgn(L.netCash,0)}`:''}`; signCls($('d-bal-s'), pnl);
   tween($('d-cnt'), closed.length, x=>String(Math.round(x))); $('d-cnt-s').textContent=`всего записей: ${S.trades.length}`;
   tween($('d-wr'), closed.length?wins.length/closed.length*100:NaN, x=>fmt(x,0)+'%'); $('d-wr-s').textContent=`${wins.length} из ${closed.length} закрытых`;
@@ -2138,19 +2139,26 @@ function saveCash(list){ S.profile.cash=list; S.profile.updatedAt=Date.now(); S.
 $('cashAdd').addEventListener('click',()=>{
   const a=pnum($('cashAmt').value); if(!(a>0)){ cashMsg('Укажите сумму больше нуля.',true); $('cashAmt').focus(); return; }
   if(cashType==='out' && a>balance()+1e-9){ cashMsg('Сумма вывода больше текущего депозита.',true); return; }
-  const m={id:'c'+Date.now().toString(36), date:$('cashDate').value||today(), amount: cashType==='in'?a:-a, note:$('cashNote').value.trim()};
+  const m={id:'c'+Date.now().toString(36), date:$('cashDate').value||today(), amount: cashType==='in'?a:-a, note:$('cashNote').value.trim(), inStart:true};
+  S.profile.startDeposit = +((pnum(S.profile.startDeposit)||0) + m.amount).toFixed(2);   // сразу добавляем в стартовый депозит
   cashNewId=m.id; saveCash(cashList().concat([m])); $('cashAmt').value=''; $('cashNote').value='';
   cashMsg(cashType==='in'?'Пополнение записано':'Вывод записан');
 });
 $('cashList').addEventListener('click',e=>{ const b=e.target.closest('[data-cdel]'); if(!b) return;
   if(!b.classList.contains('arm')){ b.classList.add('arm'); b.textContent='?'; b.title='Нажмите ещё раз, чтобы удалить'; setTimeout(()=>{ if(b.isConnected){ b.classList.remove('arm'); b.textContent='×'; } },2500); return; }
+  const del=cashList().find(m=>m.id===b.dataset.cdel);
+  if(del && del.inStart) S.profile.startDeposit = +((pnum(S.profile.startDeposit)||0) - pnum(del.amount)).toFixed(2);   // убираем и из стартового
   saveCash(cashList().filter(m=>m.id!==b.dataset.cdel)); });
 function renderCash(){
+  // старые записи переносим в стартовый депозит один раз
+  const legacy=cashList().filter(m=>!m.inStart && isFinite(pnum(m.amount)));
+  if(legacy.length){ S.profile.startDeposit = +((pnum(S.profile.startDeposit)||0) + legacy.reduce((a,m)=>a+pnum(m.amount),0)).toFixed(2);
+    S.profile.cash = cashList().map(m=>Object.assign({}, m, {inStart:true})); S.profile.updatedAt=Date.now(); S.profileDirty=true; saveLocal(); scheduleSync(0); setTimeout(()=>renderAll({eq:'morph'}),0); }
   const list=cashList().slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const inS=list.filter(m=>m.amount>0).reduce((a,m)=>a+pnum(m.amount),0), outS=list.filter(m=>m.amount<0).reduce((a,m)=>a+pnum(m.amount),0);
-  $('cashSum').textContent = list.length ? `пополнено ${fmt(inS,0)} · выведено ${fmt(Math.abs(outS),0)}` : 'не влияют на доходность';
+  $('cashSum').textContent = list.length ? `пополнено ${fmt(inS,0)} · выведено ${fmt(Math.abs(outS),0)}` : 'добавляются в стартовый депозит';
   $('cashList').innerHTML = list.length ? list.map(m=>`<div class="crow ${m.id===cashNewId?'new':''}"><span class="cd">${ddmm(m.date)}</span><span class="cn">${esc(m.note|| (m.amount>0?'Пополнение':'Вывод'))}</span><span class="ca ${m.amount>0?'pos':'neg'}">${sgn(pnum(m.amount))}</span><button type="button" class="x" data-cdel="${esc(m.id)}" aria-label="Удалить запись">×</button></div>`).join('')
-    : '<p class="hint" style="margin:0">Записывайте сюда пополнения и выводы. Депозит изменится, а доходность, просадка и цели будут считаться только по сделкам.</p>';
+    : '<p class="hint" style="margin:0">Пополнение сразу прибавится к стартовому депозиту, вывод вычтется из него. Доходность, риск и цели считаются от нового стартового депозита. Удалите запись, и стартовый депозит вернётся обратно.</p>';
   cashNewId=null;
 }
 
