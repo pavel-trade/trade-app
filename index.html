@@ -742,17 +742,17 @@ table.cmp .sh{display:none}
           <div class="f only-crypto"><label for="fee">Комиссия (тейкер)</label><div class="inp"><input id="fee" inputmode="decimal" value="0.05"><span>%</span></div></div>
           <div class="f only-fx" hidden><label for="fxComm">Комиссия за лот</label><div class="inp"><input id="fxComm" inputmode="decimal" value="0" placeholder="0"><span>$</span></div></div>
           <div class="f full only-fx" hidden><label for="fxInst">Тип инструмента</label>
-            <select id="fxInst"><option value="usdq">EURUSD, GBPUSD, AUDUSD… (котировка в USD)</option><option value="usdb">USDCHF, USDCAD… (USD в начале)</option><option value="jpy">USDJPY</option><option value="jpyx">EURJPY, GBPJPY… (кроссы с JPY)</option><option value="cross">EURGBP, EURCHF, AUDCAD… (другие кроссы)</option><option value="xau">Золото XAUUSD</option><option value="xag">Серебро XAGUSD</option><option value="oil">Нефть Brent / WTI</option><option value="idx">Индексы в USD: US30, NAS100, SPX500</option><option value="ger">Индекс GER40 (DAX, в EUR)</option><option value="cfd">Криптовалюта у брокера: BTCUSD, ETHUSD</option><option value="custom">Свой инструмент (котировка в USD)</option></select></div>
+            <select id="fxInst"><option value="usdq">EURUSD, GBPUSD, AUDUSD… (котировка в USD)</option><option value="usdb">USDCHF, USDCAD… (USD в начале)</option><option value="jpy">USDJPY</option><option value="jpyx">EURJPY, GBPJPY… (кроссы с JPY)</option><option value="cross">Кроссы с EUR/GBP/AUD/NZD в конце: EURGBP, GBPAUD…</option><option value="crossd">Кроссы с CHF/CAD и др. в конце: EURCHF, AUDCAD, EURTRY…</option><option value="xau">Золото XAUUSD</option><option value="xag">Серебро XAGUSD</option><option value="xpt">Платина / палладий XPTUSD, XPDUSD</option><option value="oil">Нефть Brent / WTI</option><option value="gas">Природный газ XNGUSD</option><option value="idx">Индексы в USD: US30, NAS100, SPX500</option><option value="cfd">Криптовалюта у брокера: BTCUSD, ETHUSD</option><option value="ger">Индексы в EUR: GER40, FRA40, EU50</option><option value="idxgbp">Индекс UK100 (в GBP)</option><option value="idxjpy">Индекс JP225 (в JPY)</option><option value="custom">Свой инструмент (котировка в USD)</option></select></div>
           <div class="f only-fx" hidden><label for="fxContract">Размер лота (1 лот =)</label><div class="inp"><input id="fxContract" inputmode="decimal" value="100000"><span>ед.</span></div></div>
           <div class="f only-fx" hidden><label for="fxPip">Размер пункта</label><input id="fxPip" inputmode="decimal" value="0.0001"></div>
-          <div class="f full only-fx" id="fxRateWrap" hidden><label for="fxRate" id="fxRateLbl">Курс для пересчёта в USD</label><input id="fxRate" inputmode="decimal" value=""></div>
+          <div class="f full only-fx" id="fxRateWrap" hidden><label for="fxRate" id="fxRateLbl">Курс для пересчёта в USD</label><input id="fxRate" inputmode="decimal" value=""><span class="hint" id="fxRateHint"></span></div>
           <span class="hint only-fx full" id="fxInfo" hidden style="grid-column:1/-1"></span>
           <div class="f full"><label for="levs">Разрешённые плечи</label><input id="levs" value="1, 2, 3, 5, 10, 15, 20, 25, 50"><span class="hint">Через запятую. Выбирается наименьшее безопасное. Нажмите строку в таблице плеч, чтобы выбрать своё.</span></div>
         </fieldset>
 
         <fieldset>
           <legend>Сделка</legend>
-          <div class="f"><label for="ticker" id="tickerLbl">Монета</label><input id="ticker" value="BTCUSDT" list="coinList" autocapitalize="characters"></div>
+          <div class="f"><label for="ticker" id="tickerLbl">Монета</label><select id="fxSym" hidden></select><input id="ticker" value="BTCUSDT" list="coinList" autocapitalize="characters"></div>
           <div class="f"><label for="cat">Категория</label><input id="cat" value="Свинг" list="catList"></div>
           <div class="f full"><label for="exPick" id="exLbl">Биржа</label>
             <div class="exrow"><select id="exPick"></select><input id="exch" value="Binance" placeholder="Название" aria-label="Название биржи или брокера" hidden></div>
@@ -1182,13 +1182,18 @@ const FX_PRESETS={
   usdb:{name:'USDCHF, USDCAD… (USD в начале)', contract:100000, pip:0.0001, conv:'inv'},
   jpy:{name:'USDJPY', contract:100000, pip:0.01, conv:'inv'},
   jpyx:{name:'EURJPY, GBPJPY… (кроссы с JPY)', contract:100000, pip:0.01, conv:'div', rateLbl:'Курс USDJPY', rateDef:150},
-  cross:{name:'EURGBP, EURCHF, AUDCAD… (другие кроссы)', contract:100000, pip:0.0001, conv:'mul', rateLbl:'Курс котируемой валюты к USD (для EURGBP — курс GBPUSD)', rateDef:1.3},
+  cross:{name:'Кроссы с EUR/GBP/AUD/NZD в конце: EURGBP, GBPAUD…', contract:100000, pip:0.0001, conv:'mul', rateLbl:'Курс котируемой валюты к USD (для EURGBP — курс GBPUSD)', rateDef:1.3},
+  crossd:{name:'Кроссы с CHF/CAD и др. в конце: EURCHF, AUDCAD, EURTRY…', contract:100000, pip:0.0001, conv:'div', rateLbl:'Курс USD к котируемой валюте (для EURCHF — курс USDCHF)', rateDef:0.8},
   xau:{name:'Золото XAUUSD', contract:100, pip:0.01, conv:'usd'},
   xag:{name:'Серебро XAGUSD', contract:5000, pip:0.001, conv:'usd'},
+  xpt:{name:'Платина / палладий XPTUSD, XPDUSD', contract:100, pip:0.01, conv:'usd'},
   oil:{name:'Нефть Brent / WTI', contract:1000, pip:0.01, conv:'usd'},
+  gas:{name:'Природный газ XNGUSD', contract:10000, pip:0.001, conv:'usd'},
   idx:{name:'Индексы в USD: US30, NAS100, SPX500', contract:1, pip:1, conv:'usd'},
   cfd:{name:'Криптовалюта у брокера: BTCUSD, ETHUSD', contract:1, pip:1, conv:'usd'},
-  ger:{name:'Индекс GER40 (DAX, в EUR)', contract:1, pip:1, conv:'mul', rateLbl:'Курс EURUSD', rateDef:1.1},
+  ger:{name:'Индексы в EUR: GER40, FRA40, EU50', contract:1, pip:1, conv:'mul', rateLbl:'Курс EURUSD', rateDef:1.1},
+  idxgbp:{name:'Индекс UK100 (в GBP)', contract:1, pip:1, conv:'mul', rateLbl:'Курс GBPUSD', rateDef:1.3},
+  idxjpy:{name:'Индекс JP225 (в JPY)', contract:1, pip:1, conv:'div', rateLbl:'Курс USDJPY', rateDef:150},
   custom:{name:'Свой инструмент (котировка в USD)', contract:null, pip:null, conv:'usd'}
 };
 function calcForex(o){
@@ -1346,23 +1351,76 @@ $('exPick').addEventListener('change',()=>{
 });
 $('exch').addEventListener('change',()=>lsSet('poscalc.ex.'+MODE, $('exch').value));
 /* ---- инструмент: помним отдельно для крипты и форекса, тип форекса угадываем по названию ---- */
-const FX_SYMS=['EURUSD','GBPUSD','AUDUSD','NZDUSD','USDJPY','USDCHF','USDCAD','EURJPY','GBPJPY','AUDJPY','CADJPY','CHFJPY','EURGBP','EURCHF','EURAUD','GBPCHF','AUDCAD','XAUUSD','XAGUSD','BRENT','WTI','US30','NAS100','SPX500','GER40','BTCUSD','ETHUSD'];
-function fxGuess(sym,force){
-  const x=String(sym||'').toUpperCase().replace(/[^A-Z0-9]/g,''); let t=null;
-  if(/^XAU/.test(x)) t='xau'; else if(/^XAG/.test(x)) t='xag'; else if(/^(BRENT|WTI|UKOIL|USOIL)/.test(x)) t='oil';
-  else if(/^(US30|NAS100|NQ100|SPX500|US500)/.test(x)) t='idx'; else if(/^(GER40|DE40)/.test(x)) t='ger';
-  else if(/^(BTC|ETH|SOL|XRP|LTC|BNB|DOGE)USD$/.test(x)) t='cfd';
-  else if(/^[A-Z]{6}$/.test(x)){ const b=x.slice(0,3), q=x.slice(3);
-    t = q==='USD' ? 'usdq' : b==='USD' ? (q==='JPY'?'jpy':'usdb') : q==='JPY' ? 'jpyx' : 'cross'; }
-  if(t && ($('fxInst').value!==t || force)){ $('fxInst').value=t; fxPresetFill(); }
+const FX_GROUPS=[
+  ['Основные пары',['EURUSD','GBPUSD','USDJPY','USDCHF','USDCAD','AUDUSD','NZDUSD']],
+  ['Кроссы EUR',['EURGBP','EURJPY','EURCHF','EURAUD','EURCAD','EURNZD']],
+  ['Кроссы GBP',['GBPJPY','GBPCHF','GBPAUD','GBPCAD','GBPNZD']],
+  ['Кроссы AUD, NZD',['AUDJPY','AUDCHF','AUDCAD','AUDNZD','NZDJPY','NZDCHF','NZDCAD']],
+  ['Кроссы CAD, CHF',['CADJPY','CADCHF','CHFJPY']],
+  ['Экзотика',['USDTRY','USDZAR','USDMXN','USDSEK','USDNOK','USDDKK','USDPLN','USDHUF','USDCZK','USDSGD','USDHKD','USDCNH','USDRUB','EURTRY','EURPLN','EURNOK','EURSEK','EURHUF','EURCZK','GBPTRY','GBPZAR']],
+  ['Металлы',['XAUUSD','XAGUSD','XPTUSD','XPDUSD']],
+  ['Энергоносители',['UKOIL','USOIL','XNGUSD']],
+  ['Индексы',['US30','NAS100','SPX500','US2000','GER40','FRA40','EU50','UK100','JP225']],
+  ['Криптовалюта у брокера',['BTCUSD','ETHUSD','SOLUSD','XRPUSD','LTCUSD']]
+];
+const FX_ALL=new Set(FX_GROUPS.flatMap(g=>g[1]));
+const FX_NAMES={UKOIL:'UKOIL (Brent)',USOIL:'USOIL (WTI)',XNGUSD:'XNGUSD (газ)',XAUUSD:'XAUUSD (золото)',XAGUSD:'XAGUSD (серебро)',XPTUSD:'XPTUSD (платина)',XPDUSD:'XPDUSD (палладий)',US30:'US30 (Dow Jones)',NAS100:'NAS100 (Nasdaq)',SPX500:'SPX500 (S&P 500)',US2000:'US2000 (Russell)',GER40:'GER40 (DAX)',FRA40:'FRA40 (CAC)',EU50:'EU50 (Euro Stoxx)',UK100:'UK100 (FTSE)',JP225:'JP225 (Nikkei)'};
+let RATE_PAIR='';
+$('fxSym').innerHTML = FX_GROUPS.map(([g,l])=>`<optgroup label="${g}">`+l.map(x=>`<option value="${x}">${FX_NAMES[x]||x.slice(0,3)+'/'+x.slice(3)}</option>`).join('')+'</optgroup>').join('') + '<option value="__other">Другой инструмент…</option>';
+$('fxSymList').innerHTML=[...FX_ALL].map(x=>`<option value="${x}">`).join('');
+function syncSymPicker(){
+  const fx=MODE==='fx', v=$('ticker').value.trim().toUpperCase(), known=FX_ALL.has(v);
+  $('fxSym').hidden=!fx;
+  if(fx){ $('fxSym').value = known ? v : '__other'; $('ticker').hidden = known; $('ticker').placeholder='Например, EURUSD'; }
+  else { $('ticker').hidden=false; $('ticker').placeholder=''; }
 }
-$('ticker').addEventListener('change',()=>{ lsSet('poscalc.tk.'+MODE, $('ticker').value.trim().toUpperCase()); if(MODE==='fx'){ fxGuess($('ticker').value,true); renderCalc(); saveCalc(); } });
-$('fxSymList').innerHTML=FX_SYMS.map(x=>`<option value="${x}">`).join('');
+$('fxSym').addEventListener('change',()=>{
+  const v=$('fxSym').value;
+  if(v==='__other'){ $('ticker').hidden=false; $('ticker').value=''; $('ticker').focus(); return; }
+  $('ticker').value=v; $('ticker').hidden=true; lsSet('poscalc.tk.fx', v);
+  ['entry','stop','tp','qtyOv'].forEach(id=>$(id).value='');   // цены другого инструмента не подходят
+  fxGuess(v,true); renderCalc(); saveCalc();
+});
+function fxGuess(sym,force){
+  const x=String(sym||'').toUpperCase().replace(/[^A-Z0-9]/g,''); let t=null, pip=null, rp='';
+  if(/^XAU/.test(x)) t='xau'; else if(/^XAG/.test(x)) t='xag'; else if(/^(XPT|XPD)/.test(x)) t='xpt';
+  else if(/^(BRENT|WTI|UKOIL|USOIL)/.test(x)) t='oil'; else if(/^(XNG|NATGAS|NGAS)/.test(x)) t='gas';
+  else if(/^(US30|NAS100|NQ100|SPX500|US500|US2000|US100)/.test(x)) t='idx';
+  else if(/^(GER40|DE40|FRA40|EU50|ESTX50)/.test(x)){ t='ger'; rp='EURUSD'; }
+  else if(/^UK100/.test(x)){ t='idxgbp'; rp='GBPUSD'; } else if(/^(JP225|JPN225)/.test(x)){ t='idxjpy'; rp='USDJPY'; }
+  else if(/^(BTC|ETH|SOL|XRP|LTC|BNB|DOGE|ADA)USD$/.test(x)) t='cfd';
+  else if(/^[A-Z]{6}$/.test(x)){ const b=x.slice(0,3), q=x.slice(3);
+    if(q==='USD') t='usdq'; else if(b==='USD') t = q==='JPY' ? 'jpy' : 'usdb';
+    else if(q==='JPY'){ t='jpyx'; rp='USDJPY'; }
+    else if(['EUR','GBP','AUD','NZD'].includes(q)){ t='cross'; rp=q+'USD'; }
+    else { t='crossd'; rp='USD'+q; }
+    if(q==='HUF') pip=0.01; }
+  if(!t) return;
+  const changed = force || $('fxInst').value!==t || RATE_PAIR!==rp;
+  RATE_PAIR=rp; $('fxInst').value=t;
+  if(changed){ fxPresetFill(); if(pip) $('fxPip').value=pip; }
+}
+/* ---- курсы валют для пересчёта кроссов в USD: open.er-api.com, раз в 12 часов ---- */
+let FX_RATES=lsGet('poscalc.rates',null);
+function rateFor(pair){
+  const R=FX_RATES&&FX_RATES.r; if(!R||!pair) return NaN;
+  const v = pair.startsWith('USD') ? R[pair.slice(3)] : 1/R[pair.slice(0,3)];
+  return isFinite(v)&&v>0 ? +v.toPrecision(6) : NaN;
+}
+async function loadRates(){
+  if(FX_RATES && Date.now()-FX_RATES.t < 12*3600e3) return;
+  try{ const j=await fetch('https://open.er-api.com/v6/latest/USD').then(r=>r.json());
+    if(j && j.result==='success' && j.rates){ FX_RATES={t:Date.now(), r:j.rates}; lsSet('poscalc.rates',FX_RATES);
+      if(['1','wait'].includes($('fxRate').dataset.auto) && RATE_PAIR){ const v=rateFor(RATE_PAIR); if(v){ $('fxRate').value=v; $('fxRate').dataset.auto='1'; renderCalc(); } } } }catch(e){}
+}
+$('fxRate').addEventListener('input',()=>{ $('fxRate').dataset.auto='0'; });
+$('ticker').addEventListener('change',()=>{ const v=$('ticker').value.trim().toUpperCase(); $('ticker').value=v; lsSet('poscalc.tk.'+MODE, v);
+  if(MODE==='fx'){ fxGuess(v,true); syncSymPicker(); renderCalc(); saveCalc(); } });
 /* ---- форекс: пресеты заполняют поля, поля можно менять ---- */
 function fxPresetFill(){
   const pr=FX_PRESETS[$('fxInst').value]||FX_PRESETS.usdq;
   if(pr.contract) $('fxContract').value=pr.contract; if(pr.pip) $('fxPip').value=pr.pip;
-  if(pr.rateDef) $('fxRate').value=pr.rateDef;
+  if(pr.rateDef){ const v=rateFor(RATE_PAIR); $('fxRate').value = v || pr.rateDef; $('fxRate').dataset.auto = v ? '1' : 'wait'; }
 }
 $('fxInst').addEventListener('change',()=>{ fxPresetFill(); renderCalc(); saveCalc(); });
 function fxParams(){
@@ -1370,7 +1428,8 @@ function fxParams(){
   if(!$('fxContract').value && pr.contract) $('fxContract').value=pr.contract;
   if(!$('fxPip').value && pr.pip) $('fxPip').value=pr.pip;
   const needRate = pr.conv==='mul' || pr.conv==='div';
-  $('fxRateWrap').hidden = MODE!=='fx' || !needRate; if(needRate){ $('fxRateLbl').textContent=pr.rateLbl; if(!$('fxRate').value) $('fxRate').value=pr.rateDef; }
+  $('fxRateWrap').hidden = MODE!=='fx' || !needRate; if(needRate){ $('fxRateLbl').textContent = RATE_PAIR ? 'Курс '+RATE_PAIR+' (для пересчёта в USD)' : pr.rateLbl; if(!$('fxRate').value) $('fxRate').value=rateFor(RATE_PAIR)||pr.rateDef;
+    $('fxRateHint').textContent = $('fxRate').dataset.auto==='1' && FX_RATES && RATE_PAIR ? 'Курс подставлен автоматически, обновляется раз в сутки. Можно поправить вручную.' : 'Впишите текущий курс, от него зависит стоимость пункта в USD.'; }
   return {contract:num('fxContract'), pip:num('fxPip'), conv:pr.conv, rate: needRate ? num('fxRate') : 1, commLot: num('fxComm')||0, lotsOv: num('qtyOv')};
 }
 function applyMode(){
@@ -1379,8 +1438,11 @@ function applyMode(){
   document.querySelectorAll('.only-crypto').forEach(e=>e.hidden = MODE==='fx');
   $('tickerLbl').textContent = MODE==='fx' ? 'Инструмент' : 'Монета';
   $('ticker').setAttribute('list', MODE==='fx' ? 'fxSymList' : 'coinList');
+  if(MODE==='fx') loadRates();
   if(MODE==='fx' && /USDT$/i.test($('ticker').value)) $('ticker').value = lsGet('poscalc.tk.fx','EURUSD');
   if(MODE==='crypto' && !/USDT$/i.test($('ticker').value)) $('ticker').value = lsGet('poscalc.tk.crypto','BTCUSDT');
+  if(MODE==='fx') fxGuess($('ticker').value); syncSymPicker();
+  if(MODE==='fx') ['entry','stop','tp'].forEach(id=>{ const el=$(id); if(el.defaultValue && el.value===el.defaultValue) el.value=''; });   // примерные цены биткоина на форексе не нужны
   $('qtyLbl').textContent = MODE==='fx' ? 'Объём позиции, лотов' : 'Объём позиции, монет'; $('qtyUnit').textContent = MODE==='fx' ? 'лот' : 'монет';
   renderExOptions(lsGet('poscalc.ex.'+MODE, null));
   $('levTbl').classList.toggle('fx', MODE==='fx');
@@ -2038,9 +2100,9 @@ const CH={chart:null, series:null, lines:[], tf:'4h', sym:'', src:null, candles:
 const TZS = -new Date().getTimezoneOffset()*60;   // показываем время по часам телефона
 function loadLWC(){ if(window.LightweightCharts) return Promise.resolve(); if(CH.lwc) return CH.lwc;
   CH.lwc=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='lightweight-charts.js'; sc.onload=res; sc.onerror=()=>{ CH.lwc=null; rej(new Error('lwc')); }; document.head.appendChild(sc); }); return CH.lwc; }
-function normSym(x){ x=String(x||'').toUpperCase().replace(/[\s\/\-:_]/g,'').replace(/\.P$/,''); if(!x) return ''; if(/^(XAU|XAG|BRENT|WTI|UKOIL|USOIL|US30|NAS100|NQ100|SPX500|US500|GER40|DE40|UK100|JP225)/.test(x)) return x; if(/USDT$|USDC$|FDUSD$/.test(x)) return x; if(/^[A-Z]{6}$/.test(x) && /^(EUR|GBP|USD|AUD|NZD|CAD|CHF|JPY)/.test(x)) return x; return x+'USDT'; }
+function normSym(x){ x=String(x||'').toUpperCase().replace(/[\s\/\-:_]/g,'').replace(/\.P$/,''); if(!x) return ''; if(/^(XAU|XAG|XPT|XPD|XNG|BRENT|WTI|UKOIL|USOIL|US30|NAS100|NQ100|SPX500|US500|US2000|GER40|DE40|FRA40|EU50|UK100|JP225)/.test(x)) return x; if(/USDT$|USDC$|FDUSD$/.test(x)) return x; if(/^[A-Z]{6}$/.test(x) && /^(EUR|GBP|USD|AUD|NZD|CAD|CHF|JPY)/.test(x)) return x; return x+'USDT'; }
 const isCryptoSym = x => /USDT$|USDC$|FDUSD$/.test(x);
-function tvSymbol(x){ if(/^US30/.test(x)) return 'TVC:DJI'; if(/^(NAS100|NQ100)/.test(x)) return 'NASDAQ:NDX'; if(/^(SPX500|US500)/.test(x)) return 'SP:SPX'; if(/^(GER40|DE40)/.test(x)) return 'XETR:DAX'; if(/^UK100/.test(x)) return 'TVC:UKX'; if(/^JP225/.test(x)) return 'TVC:NI225';
+function tvSymbol(x){ if(/^US30/.test(x)) return 'TVC:DJI'; if(/^(NAS100|NQ100)/.test(x)) return 'NASDAQ:NDX'; if(/^(SPX500|US500)/.test(x)) return 'SP:SPX'; if(/^(GER40|DE40)/.test(x)) return 'XETR:DAX'; if(/^FRA40/.test(x)) return 'TVC:CAC40'; if(/^EU50/.test(x)) return 'TVC:SX5E'; if(/^US2000/.test(x)) return 'TVC:RUT'; if(/^XNG/.test(x)) return 'TVC:NATGAS'; if(/^XPT/.test(x)) return 'TVC:PLATINUM'; if(/^XPD/.test(x)) return 'TVC:PALLADIUM'; if(/^UK100/.test(x)) return 'TVC:UKX'; if(/^JP225/.test(x)) return 'TVC:NI225';
   if(/^BRENT|^UKOIL/.test(x)) return 'TVC:UKOIL'; if(/^WTI|^USOIL/.test(x)) return 'TVC:USOIL'; if(/^XAU/.test(x)) return 'OANDA:XAUUSD'; if(/^XAG/.test(x)) return 'OANDA:XAGUSD'; return 'FX:'+x; }
 const SRC={
   binF:{name:'Binance Futures', url:(s,tf,n)=>`https://fapi.binance.com/fapi/v1/klines?symbol=${s}&interval=${tf}&limit=${n}`, parse:j=>j.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4]}))},
