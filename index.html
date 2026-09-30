@@ -742,7 +742,7 @@ table.cmp .sh{display:none}
           <div class="f only-crypto"><label for="fee">Комиссия (тейкер)</label><div class="inp"><input id="fee" inputmode="decimal" value="0.05"><span>%</span></div></div>
           <div class="f only-fx" hidden><label for="fxComm">Комиссия за лот</label><div class="inp"><input id="fxComm" inputmode="decimal" value="0" placeholder="0"><span>$</span></div></div>
           <div class="f full only-fx" hidden><label for="fxInst">Тип инструмента</label>
-            <select id="fxInst"><option value="usdq">EURUSD, GBPUSD, AUDUSD… (котировка в USD)</option><option value="usdb">USDCHF, USDCAD… (USD в начале)</option><option value="jpy">USDJPY</option><option value="jpyx">EURJPY, GBPJPY… (кроссы с JPY)</option><option value="cross">EURGBP, EURCHF, AUDCAD… (другие кроссы)</option><option value="xau">Золото XAUUSD</option><option value="xag">Серебро XAGUSD</option><option value="oil">Нефть Brent / WTI</option><option value="idx">Индексы в USD: US30, NAS100, SPX500</option><option value="ger">Индекс GER40 (DAX, в EUR)</option><option value="custom">Свой инструмент (котировка в USD)</option></select></div>
+            <select id="fxInst"><option value="usdq">EURUSD, GBPUSD, AUDUSD… (котировка в USD)</option><option value="usdb">USDCHF, USDCAD… (USD в начале)</option><option value="jpy">USDJPY</option><option value="jpyx">EURJPY, GBPJPY… (кроссы с JPY)</option><option value="cross">EURGBP, EURCHF, AUDCAD… (другие кроссы)</option><option value="xau">Золото XAUUSD</option><option value="xag">Серебро XAGUSD</option><option value="oil">Нефть Brent / WTI</option><option value="idx">Индексы в USD: US30, NAS100, SPX500</option><option value="ger">Индекс GER40 (DAX, в EUR)</option><option value="cfd">Криптовалюта у брокера: BTCUSD, ETHUSD</option><option value="custom">Свой инструмент (котировка в USD)</option></select></div>
           <div class="f only-fx" hidden><label for="fxContract">Размер лота (1 лот =)</label><div class="inp"><input id="fxContract" inputmode="decimal" value="100000"><span>ед.</span></div></div>
           <div class="f only-fx" hidden><label for="fxPip">Размер пункта</label><input id="fxPip" inputmode="decimal" value="0.0001"></div>
           <div class="f full only-fx" id="fxRateWrap" hidden><label for="fxRate" id="fxRateLbl">Курс для пересчёта в USD</label><input id="fxRate" inputmode="decimal" value=""></div>
@@ -1028,6 +1028,7 @@ table.cmp .sh{display:none}
   <datalist id="chSymList"><option value="BTCUSDT"><option value="ETHUSDT"><option value="SOLUSDT"><option value="BNBUSDT"><option value="XRPUSDT"><option value="DOGEUSDT"><option value="TONUSDT"><option value="ADAUSDT"><option value="AVAXUSDT"><option value="LINKUSDT"></datalist>
   <datalist id="catList"><option value="Скальп"><option value="Интрадей"><option value="Свинг"><option value="Позиционная"><option value="Новости"></datalist>
   <datalist id="coinList"></datalist>
+  <datalist id="fxSymList"></datalist>
   <datalist id="setupList"></datalist>
   <datalist id="exList"><option value="Binance"><option value="Bybit"><option value="OKX"><option value="Bitget"><option value="BingX"><option value="MEXC"><option value="Gate"><option value="KuCoin"><option value="HTX"><option value="Форекс-брокер"></datalist>
 </div>
@@ -1186,6 +1187,7 @@ const FX_PRESETS={
   xag:{name:'Серебро XAGUSD', contract:5000, pip:0.001, conv:'usd'},
   oil:{name:'Нефть Brent / WTI', contract:1000, pip:0.01, conv:'usd'},
   idx:{name:'Индексы в USD: US30, NAS100, SPX500', contract:1, pip:1, conv:'usd'},
+  cfd:{name:'Криптовалюта у брокера: BTCUSD, ETHUSD', contract:1, pip:1, conv:'usd'},
   ger:{name:'Индекс GER40 (DAX, в EUR)', contract:1, pip:1, conv:'mul', rateLbl:'Курс EURUSD', rateDef:1.1},
   custom:{name:'Свой инструмент (котировка в USD)', contract:null, pip:null, conv:'usd'}
 };
@@ -1317,28 +1319,45 @@ function saveCalc(){ const o={}; CALC_KEYS.forEach(k=>o[k]= $(k).type==='checkbo
 /* ---- биржи и брокеры: комиссия подставляется при выборе ---- */
 const EXCH={
   crypto:[['Binance',0.05],['Bybit',0.055],['OKX',0.05],['Bitget',0.06],['BingX',0.05],['MEXC',0.02],['Gate',0.05],['KuCoin',0.06],['HTX',0.05]],
-  fx:[['Стандартный счёт',0],['ECN / Raw-счёт',7],['Центовый счёт',0]]
+  fx:[['Exness',null],['RoboForex',null],['Alpari',null],['AMarkets',null],['FxPro',null],['IC Markets',null],['Pepperstone',null],['XM',null],['Tickmill',null],['InstaForex',null],['FreshForex',null],['Bybit (MT5)',null],['Bitget (TradFi)',null]]
 };
+const CRYPTO_EX=new Set(EXCH.crypto.map(x=>x[0]));
 function renderExOptions(keepName){
-  const list=EXCH[MODE], cur=keepName!=null?keepName:$('exch').value, known=list.find(x=>x[0]===cur);
-  $('exLbl').textContent = MODE==='fx' ? 'Брокер / тип счёта' : 'Биржа';
-  $('exPick').innerHTML = list.map(([n,f])=>`<option value="${esc(n)}">${esc(n)} · ${MODE==='fx'?(f?'$'+f+' за лот':'без комиссии'):fmt(f,3).replace(/0+$/,'').replace(/,$/,'')+'%'}</option>`).join('') + `<option value="__other">${MODE==='fx'?'Другой брокер…':'Другая биржа…'}</option>`;
-  if(known){ $('exPick').value=cur; $('exch').hidden=true; } else if(cur){ $('exPick').value='__other'; $('exch').hidden=false; $('exch').value=cur; } else { $('exPick').value=list[0][0]; $('exch').value=list[0][0]; $('exch').hidden=true; }
+  const list=EXCH[MODE];
+  let cur = keepName!=null ? keepName : (MODE==='crypto' ? $('exch').value : '');
+  if(MODE==='fx' && CRYPTO_EX.has(cur)) cur='';   // биржа из крипто-режима брокером не считается
+  const known=list.find(x=>x[0]===cur);
+  $('exLbl').textContent = MODE==='fx' ? 'Брокер' : 'Биржа';
+  $('exPick').innerHTML = list.map(([n,f])=>`<option value="${esc(n)}">${esc(n)}${MODE==='fx'?'':' · '+fmt(f,3).replace(/0+$/,'').replace(/,$/,'')+'%'}</option>`).join('') + `<option value="__other">${MODE==='fx'?'Другой брокер…':'Другая биржа…'}</option>`;
+  if(known){ $('exPick').value=cur; $('exch').value=cur; $('exch').hidden=true; } else if(cur){ $('exPick').value='__other'; $('exch').hidden=false; $('exch').value=cur; } else { $('exPick').value=list[0][0]; $('exch').value=list[0][0]; $('exch').hidden=true; }
   exHint();
 }
 function exHint(){
   const v=$('exPick').value, it=EXCH[MODE].find(x=>x[0]===v);
   $('exHint').textContent = !it ? (MODE==='fx'?'Впишите название брокера, комиссию за лот укажите выше.':'Впишите название биржи, комиссию укажите выше.')
-    : MODE==='fx' ? (it[1] ? `Подставлена комиссия $${it[1]} за лот (открытие + закрытие). Проверьте условия своего брокера.` : 'Брокер берёт плату спредом, комиссия за лот 0.')
+    : MODE==='fx' ? 'Комиссию укажите в поле «Комиссия за лот»: стандартный счёт обычно 0 (плата в спреде), ECN / Raw — около $6–7 за лот.'
     : `Подставлена комиссия тейкера ${String(it[1]).replace('.',',')}% для обычного уровня. Если у вас VIP или скидка, поправьте поле «Комиссия».`;
 }
 $('exPick').addEventListener('change',()=>{
   const v=$('exPick').value, it=EXCH[MODE].find(x=>x[0]===v);
-  if(it){ $('exch').value=it[0]; $('exch').hidden=true; if(MODE==='fx') $('fxComm').value=it[1]; else $('fee').value=it[1]; }
+  if(it){ $('exch').value=it[0]; $('exch').hidden=true; if(it[1]!=null){ if(MODE==='fx') $('fxComm').value=it[1]; else $('fee').value=it[1]; } }
   else { $('exch').hidden=false; $('exch').value=''; $('exch').focus(); }
   lsSet('poscalc.ex.'+MODE, $('exch').value); exHint(); renderCalc(); saveCalc();
 });
 $('exch').addEventListener('change',()=>lsSet('poscalc.ex.'+MODE, $('exch').value));
+/* ---- инструмент: помним отдельно для крипты и форекса, тип форекса угадываем по названию ---- */
+const FX_SYMS=['EURUSD','GBPUSD','AUDUSD','NZDUSD','USDJPY','USDCHF','USDCAD','EURJPY','GBPJPY','AUDJPY','CADJPY','CHFJPY','EURGBP','EURCHF','EURAUD','GBPCHF','AUDCAD','XAUUSD','XAGUSD','BRENT','WTI','US30','NAS100','SPX500','GER40','BTCUSD','ETHUSD'];
+function fxGuess(sym,force){
+  const x=String(sym||'').toUpperCase().replace(/[^A-Z0-9]/g,''); let t=null;
+  if(/^XAU/.test(x)) t='xau'; else if(/^XAG/.test(x)) t='xag'; else if(/^(BRENT|WTI|UKOIL|USOIL)/.test(x)) t='oil';
+  else if(/^(US30|NAS100|NQ100|SPX500|US500)/.test(x)) t='idx'; else if(/^(GER40|DE40)/.test(x)) t='ger';
+  else if(/^(BTC|ETH|SOL|XRP|LTC|BNB|DOGE)USD$/.test(x)) t='cfd';
+  else if(/^[A-Z]{6}$/.test(x)){ const b=x.slice(0,3), q=x.slice(3);
+    t = q==='USD' ? 'usdq' : b==='USD' ? (q==='JPY'?'jpy':'usdb') : q==='JPY' ? 'jpyx' : 'cross'; }
+  if(t && ($('fxInst').value!==t || force)){ $('fxInst').value=t; fxPresetFill(); }
+}
+$('ticker').addEventListener('change',()=>{ lsSet('poscalc.tk.'+MODE, $('ticker').value.trim().toUpperCase()); if(MODE==='fx'){ fxGuess($('ticker').value,true); renderCalc(); saveCalc(); } });
+$('fxSymList').innerHTML=FX_SYMS.map(x=>`<option value="${x}">`).join('');
 /* ---- форекс: пресеты заполняют поля, поля можно менять ---- */
 function fxPresetFill(){
   const pr=FX_PRESETS[$('fxInst').value]||FX_PRESETS.usdq;
@@ -1359,6 +1378,9 @@ function applyMode(){
   document.querySelectorAll('.only-fx').forEach(e=>e.hidden = MODE!=='fx');
   document.querySelectorAll('.only-crypto').forEach(e=>e.hidden = MODE==='fx');
   $('tickerLbl').textContent = MODE==='fx' ? 'Инструмент' : 'Монета';
+  $('ticker').setAttribute('list', MODE==='fx' ? 'fxSymList' : 'coinList');
+  if(MODE==='fx' && /USDT$/i.test($('ticker').value)) $('ticker').value = lsGet('poscalc.tk.fx','EURUSD');
+  if(MODE==='crypto' && !/USDT$/i.test($('ticker').value)) $('ticker').value = lsGet('poscalc.tk.crypto','BTCUSDT');
   $('qtyLbl').textContent = MODE==='fx' ? 'Объём позиции, лотов' : 'Объём позиции, монет'; $('qtyUnit').textContent = MODE==='fx' ? 'лот' : 'монет';
   renderExOptions(lsGet('poscalc.ex.'+MODE, null));
   $('levTbl').classList.toggle('fx', MODE==='fx');
@@ -1482,10 +1504,10 @@ let calcSaveT;
 $('form').addEventListener('input',e=>{ if(e.target.id==='levs') S.levPick=null; renderCalc(); clearTimeout(calcSaveT); calcSaveT=setTimeout(saveCalc,300); });
 $('depSync').addEventListener('change',()=>{ renderCalc(); saveCalc(); });
 $('modeSeg').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b||b.dataset.m===MODE) return; MODE=b.dataset.m; lsSet('poscalc.mode',MODE); S.levPick=null;
-  const tk=$('ticker'); if(MODE==='fx' && /USDT$/i.test(tk.value)) tk.value='EURUSD'; if(MODE==='crypto' && !/USDT$/i.test(tk.value)) tk.value='BTCUSDT';
+  const tk=$('ticker'); tk.value = lsGet('poscalc.tk.'+MODE, MODE==='fx'?'EURUSD':'BTCUSDT'); if(MODE==='fx') fxGuess(tk.value);
   if(MODE==='fx' && $('levs').value.trim()==='1, 2, 3, 5, 10, 15, 20, 25, 50') $('levs').value='10, 20, 30, 50, 100, 200, 500';
   if(MODE==='crypto' && $('levs').value.trim()==='10, 20, 30, 50, 100, 200, 500') $('levs').value='1, 2, 3, 5, 10, 15, 20, 25, 50';
-  $('qtyOv').value=''; if(MODE==='fx') fxPresetFill();
+  ['entry','stop','tp','qtyOv'].forEach(id=>$(id).value='');   // цены другого рынка не подходят
   applyMode(); renderCalc(); saveCalc(); });
 $('qtyReset').addEventListener('click',()=>{ $('qtyOv').value=''; renderCalc(); $('qtyOv').focus(); });
 $('clear').addEventListener('click',()=>{ ['entry','stop','tp','comment','qtyOv'].forEach(id=>$(id).value=''); S.levPick=null; renderCalc(); $('entry').focus(); });
