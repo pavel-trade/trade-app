@@ -1,7 +1,7 @@
 // Офлайн-кэш: приложение открывается без интернета после первого запуска.
 // Файлы приложения берутся из сети (чтобы сразу получать обновления), без сети — из кэша.
 // Запросы к базе (Supabase) не кэшируются.
-const CACHE = 'poscalc-v21';
+const CACHE = 'poscalc-v22';
 const SHELL = ['./', './index.html', './lightweight-charts.js', './manifest.webmanifest', './app-icon-180.png', './app-icon-192.png', './app-icon-512.png'];
 
 self.addEventListener('install', e => {

@@ -423,6 +423,8 @@ button{font:inherit}
 .prow .pu small{display:block;font-size:11px;font-weight:500;color:var(--muted)}
 @media (max-width:640px){.prow{grid-template-columns:1fr 1fr auto}.prow .pk.hide-m{display:none}.chsym input{width:120px}.chprice b{font-size:20px}.chwrap{height:clamp(300px,52vh,480px)}}
 /* ---- живые цены ---- */
+.exview{grid-column:1/-1;background:var(--panel-2);padding:10px 14px;font-size:12.5px;color:var(--muted);line-height:1.5}
+.exview b{color:var(--ink);font-weight:600} .exview span{font-family:var(--f-mono);font-weight:600}
 .rowclose{margin-left:8px;font:inherit;font-size:12px;font-weight:600;padding:3px 9px;border-radius:7px;border:1px solid var(--warn);background:var(--warn-soft);color:var(--warn);cursor:pointer;white-space:nowrap;transition:background .15s}
 .rowclose:hover{background:var(--warn);color:var(--panel)}
 .rowclose.arm{background:var(--warn);color:var(--panel)}
@@ -830,6 +832,7 @@ table.cmp .sh{display:none}
           <div class="stat"><span class="k">До тейка</span><span class="v" id="c-tp">—</span><span class="s" id="c-tp-s"></span></div>
           <div class="stat"><span class="k">Прибыль</span><span class="v pos" id="c-profit">—</span><span class="s" id="c-profit-s">USDT после комиссий</span></div>
           <div class="stat"><span class="k">Матожидание</span><span class="v" id="c-ev">—</span><span class="s" id="c-ev-s"></span></div>
+          <div class="exview" id="cExView" hidden></div>
         </div>
 
         <div class="panel stag" style="--i:3"><h2>Уровни</h2>
@@ -1544,6 +1547,13 @@ function renderCalc(){
   else { tween($('c-stop'), c.stopPct, x=>fmt(x,2)+'%'); setText('c-stop-s', 'с комиссиями '+fmt(c.stopPct+c.feeStopPct,2)+'%'); }
   const CUR=c.fx?'USD':'USDT'; $('c-profit-s').textContent = c.multi && c.be && isFinite(c.beProfit) ? `все тейки · БУ: ${sgn(c.beProfit)}` : c.multi ? CUR+' · все тейки' : CUR+' после комиссий';
   if(c.multi) $('tpSumHint').textContent = `Сумма долей: ${fmt(c.wsum*100,0)}%`; 
+  { const ev=$('cExView'), L=(c.use&&c.use.L)||NaN, mg=c.notional/L;
+    if(!c.fx && isFinite(mg) && mg>0){ const sl=c.qty*Math.abs(c.E-c.S), tp=c.tpValid&&!c.multi ? c.qty*Math.abs(c.T-c.E) : NaN, fee=c.notional*(c.feePct||0)/100;
+      ev.hidden=false; ev.innerHTML=`<b>Как покажет биржа</b> (без комиссий, % от маржи ${fmt(mg,2)} при x${fmt(L,0)}): `+
+        `стоп <span class="neg">${sgn(-sl)} (${sgn(-sl/mg*100,2)}%)</span>`+(isFinite(tp)?` · тейк <span class="pos">${sgn(tp)} (${sgn(tp/mg*100,2)}%)</span>`:'')+
+        ` · комиссия за вход ≈ ${fmt(fee,2)}`; }
+    else ev.hidden=true; }
+  { const w=c.stopPct>30; $('c-stop-s').classList.toggle('neg',w); if(w) setTimeout(()=>{ $('c-stop-s').textContent='Стоп дальше 30% от входа — проверьте, нет ли опечатки'; },0); }
   tween($('c-risk'), c.riskUsd, x=>'−'+fmt(x,2)); setText('c-risk-s', CUR+' · '+fmt(c.r,2)+'% депо'+(c.manualQty&&Math.abs(c.r-c.rPlan)>0.005?' (план '+fmt(c.rPlan,2)+'%)':''));
   if(c.fx){ tween($('c-size'), c.lots, x=>fmt(x,2)+' лота'); setText('c-size-s', fmt(c.qty,c.qty<10?2:0)+' ед. · $'+fmt(c.notional,0)+(c.manualQty?' · вручную':c.tooSmall?' · мин. лот':'')); }
   else { tween($('c-size'), c.notional, x=>fmt(x,2)); setText('c-size-s', 'USDT · '+fmt(c.qty, c.qty<1?5:3)+' монет'+(c.manualQty?' · вручную':'')); }
