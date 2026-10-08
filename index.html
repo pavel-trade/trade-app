@@ -184,6 +184,18 @@ input.err{border-color:var(--bad);box-shadow:0 0 0 3px var(--bad-soft)}
 .hint{font-size:12px;color:var(--muted)}
 .chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer}
 .chk input{width:auto;accent-color:var(--accent)}
+/* оценка по стратегии (конфлюенция) */
+.confchip{font-size:12px;font-weight:700;padding:2px 10px;border-radius:20px;border:1px solid var(--muted);color:var(--muted);background:transparent;white-space:nowrap}
+.confchip.good{background:var(--good-soft);color:var(--good);border-color:transparent}
+.confchip.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.confchip.bad{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.conflgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px}
+@media (max-width:600px){.conflgrid{grid-template-columns:1fr}}
+.conflsub{font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin:0 0 4px}
+#conflGates .chk,#conflFactors .chk{font-size:13px;color:var(--ink);padding:5px 0;align-items:flex-start;gap:8px}
+#conflGates .chk input,#conflFactors .chk input{margin-top:1px}
+.conflpts{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.conflfoot{display:flex;gap:18px;margin-top:10px;flex-wrap:wrap}
 .lblrow{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .slider{display:flex;align-items:center;gap:10px;min-height:42px}
 .slider input[type=range]{flex:1;padding:0;border:0;background:transparent;accent-color:var(--accent);box-shadow:none}
@@ -860,7 +872,17 @@ table.cmp .sh{display:none}
 
         <div class="panel stag" style="--i:4"><h2>Мани-менеджмент</h2><ul class="checks" id="checks"></ul></div>
 
-        <div class="panel stag" style="--i:5">
+        <div class="panel stag" style="--i:5" id="conflPanel">
+          <div class="phead"><h2>Оценка по стратегии</h2><span class="confchip" id="conflChip">—</span></div>
+          <p class="note" id="conflMsg">Отметьте, что подтвердилось на графике. «Обязательные» нужны все; факторы добавляют баллы и объём. R/R и риск берутся из расчёта слева.</p>
+          <div class="conflgrid">
+            <div><p class="conflsub">Обязательные (гейты)</p><div id="conflGates"></div></div>
+            <div><p class="conflsub">Факторы подтверждения</p><div id="conflFactors"></div></div>
+          </div>
+          <div class="conflfoot"><button type="button" class="link" id="conflApply" hidden>Применить риск к полю</button><button type="button" class="link" id="conflReset">Сбросить отметки</button></div>
+        </div>
+
+        <div class="panel stag" style="--i:6">
           <div class="phead"><h2>Подбор плеча</h2><button type="button" class="link" id="levAuto" hidden>Вернуть авто</button></div>
           <div class="tbl"><table id="levTbl">
             <thead><tr><th class="l">Плечо</th><th>Маржа</th><th>% депо</th><th>Ликвидация ≈</th><th>Статус</th></tr></thead>
@@ -1672,6 +1694,69 @@ $('modeSeg').addEventListener('click',e=>{ const b=e.target.closest('button'); i
   applyMode(); renderCalc(); saveCalc(); });
 $('qtyReset').addEventListener('click',()=>{ $('qtyOv').value=''; renderCalc(); $('qtyOv').focus(); });
 $('clear').addEventListener('click',()=>{ ['entry','stop','tp','tp1','tp2','tp3','comment','qtyOv','fxSwap'].forEach(id=>$(id).value=''); S.levPick=null; renderCalc(); $('entry').focus(); });
+/* ===== оценка по стратегии (конфлюенция) ===== */
+const CONF_GATES=[
+  'Аллигатор «ест» — тренд, не флёт',
+  'Направление по старшему ТФ / волне',
+  'Цена у сильного уровня или объёмного центра (ПОК)',
+  'Есть свечной триггер на закрытии / слом структуры',
+  'Не время крупных новостей и низкой ликвидности'
+];
+const CONF_FACTORS=[
+  ['Уровень совпал с объёмным центром (ПОК)',2],
+  ['Совпадение с уровнем Фибоначчи 38.2–61.8%',1],
+  ['Слом структуры (BOS) на младшем ТФ',2],
+  ['Дивергенция по RSI / MACD / AO',1],
+  ['AO/AC подтверждают (блюдце, цвет по тренду)',1],
+  ['Объём / Squat-бар в зоне',1],
+  ['Контекст волны: конец коррекции 2 или 4',1]
+];
+let conflSt=lsGet('poscalc.confl',{g:[],f:[]}); if(!conflSt||typeof conflSt!=='object') conflSt={g:[],f:[]};
+conflSt.g=Array.isArray(conflSt.g)?conflSt.g:[]; conflSt.f=Array.isArray(conflSt.f)?conflSt.f:[];
+function conflBuild(){
+  const g=$('conflGates'), f=$('conflFactors'); if(!g||!f) return;
+  g.innerHTML=CONF_GATES.map((t,i)=>`<label class="chk"><input type="checkbox" data-cg="${i}"${conflSt.g[i]?' checked':''}><span>${esc(t)}</span></label>`).join('');
+  f.innerHTML=CONF_FACTORS.map((x,i)=>`<label class="chk"><input type="checkbox" data-cf="${i}"${conflSt.f[i]?' checked':''}><span>${esc(x[0])}</span><span class="conflpts">+${x[1]}</span></label>`).join('');
+}
+function conflRead(){
+  conflSt.g=CONF_GATES.map((_,i)=>{const el=document.querySelector(`[data-cg="${i}"]`);return el?el.checked:false;});
+  conflSt.f=CONF_FACTORS.map((_,i)=>{const el=document.querySelector(`[data-cf="${i}"]`);return el?el.checked:false;});
+  lsSet('poscalc.confl',conflSt);
+}
+function conflEval(){
+  const gatesOk=CONF_GATES.every((_,i)=>conflSt.g[i]);
+  let score=0; CONF_FACTORS.forEach((x,i)=>{ if(conflSt.f[i]) score+=x[1]; });
+  const gN=conflSt.g.filter(Boolean).length;
+  const c=lastCalc&&lastCalc.c; const riskPct=c?c.r:NaN;
+  let rr=NaN; if(c && isFinite(c.E)&&isFinite(c.S)&&isFinite(c.T)&&Math.abs(c.E-c.S)>0) rr=Math.abs(c.T-c.E)/Math.abs(c.E-c.S);
+  let cls,txt,rec=0;
+  if(!gatesOk){ cls='bad'; txt='СТОП · гейты '+gN+'/'+CONF_GATES.length; }
+  else if(c && ((isFinite(rr)&&rr<2.99) || riskPct>2)){ cls='warn'; txt='Проверьте риск/RR'; }
+  else if(score<=1){ cls='warn'; txt='ПРОПУСК · счёт '+score; }
+  else if(score<=3){ cls='good'; txt='ВХОД · 1% · счёт '+score; rec=1; }
+  else { cls='good'; txt='ВХОД · до 2% · счёт '+score; rec=2; }
+  return {gatesOk,gN,score,cls,txt,rec,rr,riskPct};
+}
+let conflRec=0;
+function conflRefresh(){
+  const chip=$('conflChip'); if(!chip) return; const v=conflEval();
+  chip.className='confchip '+v.cls; chip.textContent=v.txt; conflRec=v.rec;
+  const ab=$('conflApply'); if(ab) ab.hidden=!(v.rec>0 && lastCalc && Math.abs((lastCalc.c.r||0)-v.rec)>0.005);
+  const msg=$('conflMsg');
+  if(msg){ if(!v.gatesOk) msg.textContent='Не все обязательные условия отмечены ('+v.gN+'/'+CONF_GATES.length+'). По стратегии такую сделку пропускаем.';
+    else if(isFinite(v.rr)&&v.rr<2.99) msg.textContent='Гейты есть, но R/R по уровням ниже 3:1 — цель слишком близко.';
+    else if(v.riskPct>2) msg.textContent='Гейты есть, но риск выше 2% депозита — уменьшите объём или стоп.';
+    else msg.textContent='Счёт конфлюенции '+v.score+'. Рекомендованный риск: '+v.rec+'% депозита.'; }
+}
+function conflPlan(){ const v=conflEval(); return {confScore:v.score, confGatesOk:v.gatesOk, confVerdict:v.txt, confFactors:CONF_FACTORS.filter((_,i)=>conflSt.f[i]).map(x=>x[0])}; }
+function conflComment(base){ const v=conflEval(); if(v.gatesOk) return base; const warn='⚠ Вход без полной конфлюенции (гейты '+v.gN+'/'+CONF_GATES.length+')'; return base? base+' · '+warn : warn; }
+{ const p=$('conflPanel'); if(p) p.addEventListener('change',e=>{ if(e.target.matches('[data-cg],[data-cf]')){ conflRead(); conflRefresh(); } }); }
+{ const b=$('conflApply'); if(b) b.addEventListener('click',()=>{ if(conflRec){ $('risk').value=conflRec; renderCalc(); saveCalc(); conflRefresh(); } }); }
+{ const b=$('conflReset'); if(b) b.addEventListener('click',()=>{ conflSt={g:[],f:[]}; lsSet('poscalc.confl',conflSt); conflBuild(); conflRefresh(); }); }
+{ const b=$('clear'); if(b) b.addEventListener('click',()=>{ conflSt={g:[],f:[]}; lsSet('poscalc.confl',conflSt); conflBuild(); conflRefresh(); }); }
+$('form').addEventListener('input',()=>{ conflRefresh(); });
+conflBuild(); conflRefresh();
+
 $('form').addEventListener('submit',e=>{
   e.preventDefault();
   const L=lastCalc; if(!L){ $('entry').focus(); return; }
@@ -1680,8 +1765,8 @@ $('form').addEventListener('submit',e=>{
   S.draft = Object.assign(newTrade({
     coin:$('ticker').value.trim().toUpperCase(), category:$('cat').value.trim(), exchange:$('exch').value.trim(), account: accts().length>1 ? $('calcAcct').value : accts()[0].id, side:c.long?'long':'short',
     tps: c.multi && c.tpValid ? c.tps.map(x=>({price:String(x.T), pct:String(Math.round(x.w*10000)/100)})) : null, be: c.multi ? c.be : null,
-    leverage:lev, fee:c.feePct, stop:String(c.S), tp:c.tpValid?String(c.T):'', prob:Math.round(c.p*100), comment:$('comment').value.trim(),
-    plan:{score:L.s.score, verdict:L.badge, riskPct:c.r, rr: isFinite(c.rr)?+c.rr.toFixed(2):null},
+    leverage:lev, fee:c.feePct, stop:String(c.S), tp:c.tpValid?String(c.T):'', prob:Math.round(c.p*100), comment:conflComment($('comment').value.trim()),
+    plan:Object.assign({score:L.s.score, verdict:L.badge, riskPct:c.r, rr: isFinite(c.rr)?+c.rr.toFixed(2):null}, conflPlan()),
     entries:[{price:String(c.E), margin:(c.notional/lev).toFixed(2), date:today()}],
   }), c.fx ? {market:'fx', conv:c.conv, rate:(c.conv==='mul'||c.conv==='div')?c.rate:null, ratePair:RATE_PAIR||'', commLot:c.comm&&c.lots?+(c.comm/c.lots).toFixed(2):0, funding:c.swap?String(+c.swap.toFixed(2)):'', contract:c.contract, pip:c.pip, fee:+c.feePct.toFixed(6)} : {market:'crypto'});
   S.delArm=false; setTab('diary'); renderEditor(true);
@@ -1847,7 +1932,7 @@ $('eqRange').addEventListener('click',e=>{ const b=e.target.closest('button'); i
 /* ---- списки подсказок: популярное + то, что уже встречалось в ваших сделках ---- */
 const CRYPTO_COINS='BTC ETH SOL BNB XRP DOGE TON ADA AVAX LINK DOT TRX LTC BCH NEAR APT SUI ARB OP POL ATOM FIL ETC INJ TIA SEI WIF PEPE SHIB BONK FLOKI UNI AAVE LDO CRV RUNE FET RENDER TAO WLD JUP PYTH ENA ONDO HYPE XLM HBAR ICP KAS STX IMX SAND MANA AXS GALA APE DYDX ORDI NOT TRUMP'.split(' ').map(x=>x+'USDT');
 const DEF_CATS=['Скальп','Интрадей','Свинг','Позиционная','Новости'];
-const DEF_SETUPS=['Пробой уровня','Ретест уровня','Отскок от уровня','Ложный пробой','Торговля по тренду','Разворот','Дивергенция','Флэт / диапазон'];
+const DEF_SETUPS=['Разворот в 3-ю волну','Отбой от ПОК (объём)','Конец коррекции (Фибо)','Пробой + ретест','Ложный пробой (ловушка)','Слом структуры (BOS)','Отбой во флете','Торговля по тренду','Дивергенция','Отскок от уровня'];
 function fillList(id, arr){ $(id).innerHTML=[...new Set(arr.filter(Boolean).map(x=>String(x).trim()).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join(''); }
 function refreshLists(){
   const T=S.trades||[], fxT=T.filter(t=>t.market==='fx'), crT=T.filter(t=>t.market!=='fx');
@@ -1963,7 +2048,7 @@ $('tradeBody').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const tr=e.t
 $('newTrade').addEventListener('click',()=>{ S.draft=newTrade(Object.assign({account:defaultAcct()}, MODE==='fx' ? {market:'fx', conv:'usd', contract:100000, pip:0.0001, leverage:100, fee:0, commLot:num('fxComm')||0, exchange:$('exch').value} : {market:'crypto', exchange:$('exch').value})); S.delArm=false; renderEditor(true); renderTrades(); $('editor').scrollIntoView({behavior:RM?'auto':'smooth',block:'start'}); setTimeout(()=>$('ed-coin')&&$('ed-coin').focus({preventScroll:true}),350); });
 
 /* =================== дисциплина =================== */
-const ERR_TAGS=['FOMO','Сдвинул стоп','Вход без сетапа','Отыгрыш','Пересидел','Рано закрыл','Большой объём','Без стопа'];
+const ERR_TAGS=['FOMO','Сдвинул стоп','Вход без сетапа','Отыгрыш','Пересидел','Рано закрыл','Большой объём','Без стопа','Торговал во флете','Против старшего ТФ','Без подтверждения','Поспешил до закрытия свечи'];
 function nowHM(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 function rules(){ const r=S.profile.rules||{}; return {streak: r.streak==null?3:+r.streak, requireStop: r.requireStop==null?true:!!r.requireStop,
   dayLosses: r.dayLosses==null?3:+r.dayLosses, dayTrades: r.dayTrades==null?5:+r.dayTrades}; }
