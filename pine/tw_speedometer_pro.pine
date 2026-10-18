@@ -395,3 +395,72 @@ if not na(phV)
                 if showDiv
                     f_drawDiv(hiBar.get(0), o1, hiBar.get(1), o2, p1, p2, false, not fade, "")
                     f_drawDiv(hiBar.get(1), o2, cb, co, p2, cp, false, not fade, fade ? "Затухание" : "Возрастание")
+
+// ============================================================================
+// D. Слепая зона на панели
+// Слепая зона — участок от экстремума цены текущего режима до пересечения EMA fast/slow
+// (= смены знака линии MACD). Пока пересечения нет, линия показывает старый тренд.
+// Состояние ведётся «на ходу» через var, без циклов по истории.
+// ============================================================================
+const string GZ = "5. Слепая зона"
+const string Z_OFF = "Выкл"
+const string Z_BOX = "Боксы (после пересечения)"
+const string Z_BG = "Фон (на ходу)"
+const string Z_BOTH = "Боксы и фон"
+string bzIn = input.string(Z_BOX, "Подсветка слепой зоны", options = [Z_OFF, Z_BOX, Z_BG, Z_BOTH], group = GZ,
+     tooltip = "Боксы: зона рисуется от бара экстремума до бара пересечения, когда пересечение уже случилось; текущая (ещё не закрытая) зона — пунктирный бокс до последнего бара. Фон: подсвечиваются бары после последнего экстремума режима, пока знак линии не сменился; если цена обновит экстремум, уже подсвеченные бары останутся подсвеченными — это «возможная» слепая зона.")
+int maxZones = input.int(30, "Хранить последних зон", minval = 1, maxval = 200, group = GZ)
+
+bool bzBoxes = bzIn == Z_BOX or bzIn == Z_BOTH
+bool bzBg = bzIn == Z_BG or bzIn == Z_BOTH
+
+var int bzReg = 0           // 1 — линия выше нуля (EMA fast > slow), -1 — ниже
+var float bzExt = na        // экстремум цены режима (high для роста, low для спада)
+var int bzExtBar = na       // бар экстремума
+int bzNew = macdV > 0 ? 1 : macdV < 0 ? -1 : bzReg
+
+// Обновление экстремума в текущем режиме (бар пересечения тоже входит в зону).
+if bzReg == 1 and high > bzExt
+    bzExt := high
+    bzExtBar := bar_index
+else if bzReg == -1 and low < bzExt
+    bzExt := low
+    bzExtBar := bar_index
+
+bool bzEnd = false          // на этом баре слепая зона закончилась (смена знака линии)
+int bzEndReg = 0
+int bzZoneStart = na
+if bzNew != bzReg and bzNew != 0
+    if bzReg != 0
+        bzEnd := true
+        bzEndReg := bzReg
+        bzZoneStart := bzExtBar
+    bzExt := bzNew == 1 ? high : low
+    bzExtBar := bar_index
+bzReg := bzNew
+
+float bzH = ta.highest(math.abs(macdV), 100)    // высота боксов на панели
+var array<box> bzBoxArr = array.new<box>()
+var box bzLiveBox = na
+
+if bzBoxes and bzEnd and not na(bzH)
+    color zc = bzEndReg == 1 ? C_UP : C_DN
+    bzBoxArr.push(box.new(bzZoneStart, bzH, bar_index, -bzH, border_color = color.new(zc, 60),
+         bgcolor = color.new(zc, 88), text = "слепая зона", text_size = size.tiny,
+         text_color = color.new(zc, 30), text_valign = text.align_top))
+    if bzBoxArr.size() > maxZones
+        bzBoxArr.shift().delete()
+
+if barstate.islast and bzBoxes and bzReg != 0 and not na(bzH)
+    color lc = bzReg == 1 ? C_UP : C_DN
+    if na(bzLiveBox)
+        bzLiveBox := box.new(bzExtBar, bzH, bar_index, -bzH, border_style = line.style_dashed,
+             text = "слепая зона?", text_size = size.tiny, text_valign = text.align_top)
+    box.set_lefttop(bzLiveBox, bzExtBar, bzH)
+    box.set_rightbottom(bzLiveBox, bar_index, -bzH)
+    box.set_border_color(bzLiveBox, color.new(lc, 50))
+    box.set_bgcolor(bzLiveBox, color.new(lc, 92))
+    box.set_text_color(bzLiveBox, color.new(lc, 30))
+
+bool bzLive = bzReg != 0 and bar_index > bzExtBar
+bgcolor(bzBg and bzLive ? color.new(color.gray, 88) : na, title = "Слепая зона (на ходу)")
