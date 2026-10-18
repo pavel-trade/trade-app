@@ -117,3 +117,98 @@ plot(macdV, "Сверка: MACD", display = display.data_window)
 plot(sigV, "Сверка: сигнальная", display = display.data_window)
 plot(histV, "Сверка: гистограмма", display = display.data_window)
 plot(aoV, "Сверка: AO", display = display.data_window)
+
+// ============================================================================
+// B. Мультитаймфрейм
+// ============================================================================
+const string GB = "3. Старшие таймфреймы"
+const string H_NONE = "Нет"
+const string H_1 = "ТФ 1"
+const string H_2 = "ТФ 2"
+const string H_3 = "ТФ 3"
+const string POS_TL = "Вверху слева"
+const string POS_TC = "Вверху по центру"
+const string POS_TR = "Вверху справа"
+const string POS_ML = "Посередине слева"
+const string POS_MR = "Посередине справа"
+const string POS_BL = "Внизу слева"
+const string POS_BC = "Внизу по центру"
+const string POS_BR = "Внизу справа"
+
+bool showMtf = input.bool(true, "Таблица MTF (знак и фаза скорости)", group = GB,
+     tooltip = "Для трёх таймфреймов: знак спидометра и фаза — «рост ускоряется / рост замедляется / спад ускоряется / спад замедляется». Значение берётся с последней закрытой свечи старшего ТФ.")
+string tf1 = input.timeframe("60", "ТФ 1", group = GB, inline = "tf")
+string tf2 = input.timeframe("240", "ТФ 2", group = GB, inline = "tf")
+string tf3 = input.timeframe("D", "ТФ 3", group = GB, inline = "tf")
+string htfIn = input.string(H_NONE, "Линия старшего ТФ на панели", options = [H_NONE, H_1, H_2, H_3], group = GB,
+     tooltip = "Рисует спидометр выбранного ТФ из таблицы ступенчатой линией. Защита от перерисовки: lookahead выключен, на истории берётся значение предыдущей закрытой свечи старшего ТФ. Плата за это — запаздывание на одну свечу старшего ТФ.")
+string mtfPosIn = input.string(POS_TR, "Положение таблицы MTF", options = [POS_TL, POS_TC, POS_TR, POS_ML, POS_MR, POS_BL, POS_BC, POS_BR], group = GB)
+
+f_pos(string p) =>
+    switch p
+        POS_TL => position.top_left
+        POS_TC => position.top_center
+        POS_TR => position.top_right
+        POS_ML => position.middle_left
+        POS_MR => position.middle_right
+        POS_BL => position.bottom_left
+        POS_BC => position.bottom_center
+        => position.bottom_right
+
+// Цвета таблиц (в модуле H зависят от темы).
+color C_TBL_BG = color.new(color.gray, 85)
+color C_TBL_HD = color.new(color.gray, 70)
+color C_TBL_TX = color.gray
+
+// Защита от перерисовки (идиома из руководства Pine): на исторических барах — значение
+// предыдущей закрытой свечи старшего ТФ ([1] на текущем ТФ), в реальном времени —
+// значение [1] самого старшего ТФ. lookahead всегда выключен.
+int idxH = barstate.isrealtime ? 1 : 0
+int idxC = barstate.isrealtime ? 0 : 1
+
+// Возвращает [MACD, MACD на предыдущей свече] старшего ТФ.
+f_htf() =>
+    [m, g, h, a] = f_core(useLog, fastLen, slowLen, sigLen, byAtr, atrLen, aoFast, aoSlow)
+    [m[idxH], m[idxH + 1]]
+
+// Ровно три вызова request.security.
+[q1, q1p] = request.security(syminfo.tickerid, tf1, f_htf(), lookahead = barmerge.lookahead_off)
+[q2, q2p] = request.security(syminfo.tickerid, tf2, f_htf(), lookahead = barmerge.lookahead_off)
+[q3, q3p] = request.security(syminfo.tickerid, tf3, f_htf(), lookahead = barmerge.lookahead_off)
+float m1 = q1[idxC]
+float m1p = q1p[idxC]
+float m2 = q2[idxC]
+float m2p = q2p[idxC]
+float m3 = q3[idxC]
+float m3p = q3p[idxC]
+
+f_phase(float cur, float prev) =>
+    string res = "нет данных"
+    if not na(cur) and not na(prev)
+        res := cur >= 0 ? (cur > prev ? "рост ускоряется" : "рост замедляется") : (cur < prev ? "спад ускоряется" : "спад замедляется")
+    res
+
+string unitTxt = byAtr ? " ATR" : useLog ? " %" : ""
+
+float htfV = htfIn == H_1 ? m1 : htfIn == H_2 ? m2 : htfIn == H_3 ? m3 : na
+plot(htfV, "Спидометр старшего ТФ", color = color.new(#E69F00, 0), linewidth = 2, style = plot.style_stepline)
+
+var table mtfTbl = table.new(f_pos(mtfPosIn), 3, 4, border_width = 1)
+
+f_mtfRow(table t, int row, string tf, float cur, float prev, string tsize) =>
+    string tfName = tf == "" ? timeframe.period : tf
+    bool lower = timeframe.in_seconds(tf) < timeframe.in_seconds()
+    string valTxt = lower ? "ТФ ниже графика" : na(cur) ? "—" : (cur >= 0 ? "+" : "") + str.tostring(cur, "#.###") + unitTxt
+    string phTxt = lower ? "—" : f_phase(cur, prev)
+    color tc = lower or na(cur) ? C_TBL_TX : cur >= 0 ? C_UP : C_DN
+    table.cell(t, 0, row, tfName, text_color = C_TBL_TX, bgcolor = C_TBL_BG, text_size = tsize)
+    table.cell(t, 1, row, valTxt, text_color = tc, bgcolor = C_TBL_BG, text_size = tsize)
+    table.cell(t, 2, row, phTxt, text_color = tc, bgcolor = C_TBL_BG, text_size = tsize)
+
+if barstate.islast and showMtf
+    table.cell(mtfTbl, 0, 0, "ТФ", text_color = C_TBL_TX, bgcolor = C_TBL_HD, text_size = size.small)
+    table.cell(mtfTbl, 1, 0, "Спидометр", text_color = C_TBL_TX, bgcolor = C_TBL_HD, text_size = size.small)
+    table.cell(mtfTbl, 2, 0, "Фаза скорости", text_color = C_TBL_TX, bgcolor = C_TBL_HD, text_size = size.small)
+    f_mtfRow(mtfTbl, 1, tf1, m1, m1p, size.small)
+    f_mtfRow(mtfTbl, 2, tf2, m2, m2p, size.small)
+    f_mtfRow(mtfTbl, 3, tf3, m3, m3p, size.small)
