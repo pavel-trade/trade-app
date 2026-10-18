@@ -488,12 +488,33 @@ float k4 = input.float(0.35, "k: волна 4 «у нуля», если |экс�
 bool showPts = input.bool(true, "Подписать точки 0-5 на графике цены", group = GE)
 string wavePosIn = input.string(POS_BR, "Положение таблицы анализа", options = [POS_TL, POS_TC, POS_TR, POS_ML, POS_MR, POS_BL, POS_BC, POS_BR], group = GE)
 
+// ============================================================================
+// F. Объём
+// Если объём недоступен (na или 0 на всей истории), блок объёма отключается.
+// ============================================================================
+const string GF = "7. Объём"
+bool showVol = input.bool(true, "Объём в таблице анализа волны", group = GF,
+     tooltip = "Средний объём на бар по каждой ноге и отношение к ноге 3 (норма для импульса: объём 3 больше, чем 1 и 5), а также относительный объём volume / SMA(volume).")
+int relLen = input.int(20, "Период SMA объёма (относительный объём)", minval = 1, group = GF)
+
+float volZ = nz(volume)
+float volSma = ta.sma(volZ, relLen)
+float relVol = volSma > 0 ? volZ / volSma : na
+var bool hasVol = false
+if not na(volume) and volume > 0
+    hasVol := true
+
+var array<float> sVol = array.new<float>(5, 0.0)    // сумма объёма по отрезку
+var array<float> sRel = array.new<float>(5, 0.0)    // сумма относительного объёма
+var array<int> sRelN = array.new<int>(5, 0)
+
 var array<int> wT = array.from(wt0, wt1, wt2, wt3, wt4, wt5)
 var array<bool> ptDone = array.new<bool>(6, false)
 var array<int> ptBar = array.new<int>(6, na)
 var array<float> ptHi = array.new<float>(6, na)
 var array<float> ptLo = array.new<float>(6, na)
 var array<float> ptCl = array.new<float>(6, na)
+var array<int> ptTm = array.new<int>(6, na)
 var array<float> sMax = array.new<float>(5, na)     // максимум спидометра в отрезке (волна k = индекс k-1)
 var array<float> sMin = array.new<float>(5, na)     // минимум спидометра в отрезке
 var array<int> sBars = array.new<int>(5, 0)         // баров в отрезке (концы входят в оба соседних)
@@ -509,11 +530,16 @@ if waveOn
             ptHi.set(i, high)
             ptLo.set(i, low)
             ptCl.set(i, close)
+            ptTm.set(i, time)
     for k = 1 to 5
         bool inSeg = ptDone.get(k - 1) and (not ptDone.get(k) or ptBar.get(k) == bar_index)
         if inSeg
             int j = k - 1
             sBars.set(j, sBars.get(j) + 1)
+            sVol.set(j, sVol.get(j) + volZ)
+            if not na(volume) and not na(relVol)
+                sRel.set(j, sRel.get(j) + relVol)
+                sRelN.set(j, sRelN.get(j) + 1)
             if not na(macdV)
                 sMax.set(j, na(sMax.get(j)) ? macdV : math.max(sMax.get(j), macdV))
                 sMin.set(j, na(sMin.get(j)) ? macdV : math.min(sMin.get(j), macdV))
@@ -631,8 +657,10 @@ if barstate.islast and waveOn
                 f_cell(0, 3 + j, str.tostring(j + 1) + (j % 2 == 0 ? " (по ходу)" : " (против)"), C_TBL_TX, C_TBL_BG)
                 f_cell(1, 3 + j, str.tostring(sBars.get(j)), C_TBL_TX, C_TBL_BG)
                 f_cell(2, 3 + j, f_num(pk, "0.000") + unitTxt, pc, C_TBL_BG)
-                f_cell(3, 3 + j, "", C_TBL_TX, C_TBL_BG)
-                f_cell(4, 3 + j, "", C_TBL_TX, C_TBL_BG)
+                float va = hasVol and showVol ? sVol.get(j) / sBars.get(j) : na
+                float v3 = hasVol and showVol ? sVol.get(2) / sBars.get(2) : na
+                f_cell(3, 3 + j, f_num(va, "#,##0"), C_TBL_TX, C_TBL_BG)
+                f_cell(4, 3 + j, f_num(v3 > 0 ? va / v3 : na, "0.00"), C_TBL_TX, C_TBL_BG)
                 f_cell(5, 3 + j, f_num(lens.get(j), "0.00"), C_TBL_TX, C_TBL_BG)
             f_row(8, "Профиль скорости: " + prof + " (направление " + (s == 1 ? "вверх" : "вниз") + ")", C_TBL_TX, C_TBL_HD)
             float l1 = lens.get(0)
@@ -642,10 +670,24 @@ if barstate.islast and waveOn
                  ", глубина 2 = " + f_num(l1 > 0 ? lens.get(1) / l1 : na, "0.000") +
                  " от 1, глубина 4 = " + f_num(l3 > 0 ? lens.get(3) / l3 : na, "0.000") + " от 3"
             f_row(9, ratios, C_TBL_TX, C_TBL_BG)
+            if showVol
+                if not hasVol
+                    f_row(10, "Объём недоступен для этого символа — блок объёма отключён.", C_TBL_TX, C_TBL_BG)
+                else
+                    float v1 = sVol.get(0) / sBars.get(0)
+                    float v3 = sVol.get(2) / sBars.get(2)
+                    float v5 = sVol.get(4) / sBars.get(4)
+                    bool vOk = v3 > v1 and v3 > v5
+                    f_row(10, "Объём: " + (vOk ? "в волне 3 больше, чем в 1 и 5 — как у импульса" : "в волне 3 НЕ больше, чем в 1 и 5"), vOk ? C_TBL_TX : C_DN, C_TBL_BG)
+                    string rv = "Отн. объём (vol / SMA" + str.tostring(relLen) + "): сейчас " + f_num(relVol, "0.00") + "; средний по волнам"
+                    for j = 0 to 4
+                        int rn = sRelN.get(j)
+                        rv += " " + str.tostring(j + 1) + ": " + f_num(rn > 0 ? sRel.get(j) / rn : na, "0.00")
+                    f_row(11, rv, C_TBL_TX, C_TBL_BG)
             if showPts
                 for i = 0 to 5
                     bool upPt = (i % 2 == 1) == (s == 1)
-                    ptLabels.push(label.new(ptBar.get(i), px.get(i), str.tostring(i), color = color.new(C_SIG, 20),
+                    ptLabels.push(label.new(ptTm.get(i), px.get(i), str.tostring(i), xloc = xloc.bar_time, color = color.new(C_SIG, 20),
                          textcolor = color.white, style = upPt ? label.style_label_down : label.style_label_up,
                          size = size.small, force_overlay = true))
     f_row(12, "Инструмент проверки разметки, не торговый сигнал.", C_TBL_TX, C_TBL_BG)
