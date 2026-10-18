@@ -691,3 +691,49 @@ if barstate.islast and waveOn
                          textcolor = color.white, style = upPt ? label.style_label_down : label.style_label_up,
                          size = size.small, force_overlay = true))
     f_row(12, "Инструмент проверки разметки, не торговый сигнал.", C_TBL_TX, C_TBL_BG)
+
+// ============================================================================
+// G. Оповещения
+// alertcondition — для меню «Создать оповещение» (рекомендуется частота «Раз за закрытие бара»).
+// alert() — динамический текст; вызывается только на закрытой свече (barstate.isconfirmed).
+// ============================================================================
+const string GG = "8. Оповещения"
+bool dynAlerts = input.bool(true, "Динамические оповещения alert()", group = GG,
+     tooltip = "Создайте оповещение с условием «Любой вызов функции alert()». Текст содержит символ, ТФ и значение спидометра. Срабатывают только на закрытой свече, чтобы не реагировать на незавершённый бар.")
+
+bool zeroUp = ta.crossover(macdV, 0)
+bool zeroDn = ta.crossunder(macdV, 0)
+bool histTurnUp = histV > histV[1] and histV[1] <= histV[2]
+bool histTurnDn = histV < histV[1] and histV[1] >= histV[2]
+
+alertcondition(bullReg, "Обычная бычья дивергенция", "{{ticker}} {{interval}}: обычная бычья дивергенция спидометра")
+alertcondition(bearReg, "Обычная медвежья дивергенция", "{{ticker}} {{interval}}: обычная медвежья дивергенция спидометра")
+alertcondition(bullHid, "Скрытая бычья дивергенция", "{{ticker}} {{interval}}: скрытая бычья дивергенция спидометра")
+alertcondition(bearHid, "Скрытая медвежья дивергенция", "{{ticker}} {{interval}}: скрытая медвежья дивергенция спидометра")
+alertcondition(threeFade, "Три пика: затухание", "{{ticker}} {{interval}}: три пика спидометра — затухание")
+alertcondition(threeGrow, "Три пика: возрастание", "{{ticker}} {{interval}}: три пика спидометра — возрастание")
+alertcondition(zeroUp, "Спидометр: переход через ноль вверх", "{{ticker}} {{interval}}: линия спидометра перешла через ноль вверх")
+alertcondition(zeroDn, "Спидометр: переход через ноль вниз", "{{ticker}} {{interval}}: линия спидометра перешла через ноль вниз")
+alertcondition(histTurnUp, "Гистограмма: разворот вверх", "{{ticker}} {{interval}}: гистограмма спидометра развернулась вверх")
+alertcondition(histTurnDn, "Гистограмма: разворот вниз", "{{ticker}} {{interval}}: гистограмма спидометра развернулась вниз")
+alertcondition(bzEnd, "Окончание слепой зоны", "{{ticker}} {{interval}}: слепая зона закончилась — EMA fast/slow пересеклись")
+
+f_alertMsg(string what) =>
+    syminfo.ticker + " " + timeframe.period + ": " + what + ". Спидометр = " + str.tostring(macdV, "0.000") + unitTxt +
+         ", гистограмма = " + str.tostring(histV, "0.000") + ", цена = " + str.tostring(close, format.mintick)
+
+if dynAlerts and barstate.isconfirmed
+    if bullReg
+        alert(f_alertMsg("обычная бычья дивергенция"), alert.freq_once_per_bar_close)
+    if bearReg
+        alert(f_alertMsg("обычная медвежья дивергенция"), alert.freq_once_per_bar_close)
+    if bullHid
+        alert(f_alertMsg("скрытая бычья дивергенция"), alert.freq_once_per_bar_close)
+    if bearHid
+        alert(f_alertMsg("скрытая медвежья дивергенция"), alert.freq_once_per_bar_close)
+    if threeFade or threeGrow
+        alert(f_alertMsg(threeFade ? "три пика — затухание" : "три пика — возрастание"), alert.freq_once_per_bar_close)
+    if zeroUp or zeroDn
+        alert(f_alertMsg(zeroUp ? "переход через ноль вверх, слепая зона закончилась" : "переход через ноль вниз, слепая зона закончилась"), alert.freq_once_per_bar_close)
+    if histTurnUp or histTurnDn
+        alert(f_alertMsg(histTurnUp ? "гистограмма развернулась вверх" : "гистограмма развернулась вниз"), alert.freq_once_per_bar_close)
