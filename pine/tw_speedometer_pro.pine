@@ -73,6 +73,8 @@ int fastLen = presetIn == P_W ? 5 : presetIn == P_B ? 13 : presetIn == P_C ? 12 
 int slowLen = presetIn == P_W ? 34 : presetIn == P_B ? 55 : presetIn == P_C ? 26 : slowIn
 int sigLen = presetIn == P_W ? 5 : presetIn == P_B ? 13 : presetIn == P_C ? 9 : sigIn
 bool byAtr = normIn == N_ATR
+if slowLen <= fastLen
+    runtime.error("Медленная EMA должна быть больше быстрой (пресет «Свои»).")
 
 const string GD = "2. Отображение"
 const string D_ALL = "Линия + сигнальная + гистограмма"
@@ -255,7 +257,7 @@ int pL = input.int(5, "Пивот: баров слева", minval = 1, maxval = 
 int pR = input.int(5, "справа", minval = 1, maxval = 50, group = GC, inline = "pv",
      tooltip = "Баров справа = задержка сигнала. Дивергенция рисуется через столько закрытых баров после пивота.")
 int minDist = input.int(5, "Расстояние между пивотами: мин.", minval = 1, group = GC, inline = "ds")
-int maxDist = input.int(80, "макс.", minval = 2, group = GC, inline = "ds")
+int maxDist = input.int(80, "макс.", minval = 2, maxval = 1000, group = GC, inline = "ds")
 int priceWin = input.int(2, "Окно поиска экстремума цены, баров в каждую сторону", minval = 0, maxval = 50, group = GC,
      tooltip = "Цена сравнивается по минимуму low (для впадин) или максимуму high (для пиков) в окне вокруг пивота индикатора, а не по close. Окно не может быть больше «баров справа».")
 bool zeroFilter = input.bool(true, "Обычные: бычьи только ниже нуля, медвежьи — выше", group = GC,
