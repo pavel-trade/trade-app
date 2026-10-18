@@ -100,7 +100,7 @@ def test_profile_classification(name, expected):
 
 def test_profile_rules_direct():
     assert sp.classify_profile(5, 10, 4, 1, 0.35) == "импульс"
-    assert sp.classify_profile(5, 10, 4, 5, 0.35) == "неопределённо"   # волна 4 не у нуля
+    assert sp.classify_profile(5, 10, 4, 5, 0.35) == sp.UNDEF_W4   # волна 4 не у нуля
     assert sp.classify_profile(9, 6, 3, 0, 0.35) == "сужающаяся диагональ"
     assert sp.classify_profile(3, 6, 9, 0, 0.35) == "расширяющаяся диагональ"
     assert sp.classify_profile(5, 3, 6, 0, 0.35) == "неопределённо"

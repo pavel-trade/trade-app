@@ -484,6 +484,9 @@ def time_to_bar(bars: list[Bar], t_ms: int, tf_sec: int) -> int | None:
     return None
 
 
+UNDEF_W4 = "неопределённо (волна 4 не вернулась к нулю)"
+
+
 def classify_profile(a1, a3, a5, c4, k=0.35) -> str:
     """a1, a3, a5 — пики спидометра в направлении волны (со знаком направления),
     c4 — экстремум спидометра в волне 4 против направления.
@@ -494,7 +497,7 @@ def classify_profile(a1, a3, a5, c4, k=0.35) -> str:
     if any(isna(x) for x in (a1, a3, a5, c4)):
         return "неопределённо"
     if a3 > a1 and a3 > a5 and a3 > 0:
-        return "импульс" if abs(c4) < k * a3 else "неопределённо"
+        return "импульс" if abs(c4) < k * a3 else UNDEF_W4
     if a1 > a3 > a5:
         return "сужающаяся диагональ"
     if a1 < a3 < a5:

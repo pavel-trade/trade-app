@@ -464,3 +464,188 @@ if barstate.islast and bzBoxes and bzReg != 0 and not na(bzH)
 
 bool bzLive = bzReg != 0 and bar_index > bzExtBar
 bgcolor(bzBg and bzLive ? color.new(color.gray, 88) : na, title = "Слепая зона (на ходу)")
+
+// ============================================================================
+// E. Анализ волны
+// Пользователь задаёт точки 0..5 (input.time). Бар точки — первый бар, у которого
+// время закрытия позже заданного времени (бар, содержащий это время, или первый после разрыва).
+// Статистика по отрезкам копится «на ходу» через var; таблица строится на последнем баре.
+// ============================================================================
+const string GE = "6. Анализ волны"
+bool waveOn = input.bool(false, "Включить анализ волны", group = GE,
+     tooltip = "Задайте время точек 0-5 изучаемой волны. Если заданы только 0 и 5 (или выключены точки 1-4), проверяется только правило 100-140 баров.")
+bool useInner = input.bool(true, "Использовать точки 1-4", group = GE,
+     tooltip = "Выключите, чтобы проверить только правило 100-140 по точкам 0 и 5.")
+// 0 = точка не задана (01.01.1970 00:00 UTC). Пример: 1789430400000 = 15.09.2026 00:00 UTC.
+int wt0 = input.time(0, "Точка 0 (начало волны)", confirm = false, group = GE)
+int wt1 = input.time(0, "Точка 1", confirm = false, group = GE)
+int wt2 = input.time(0, "Точка 2", confirm = false, group = GE)
+int wt3 = input.time(0, "Точка 3", confirm = false, group = GE)
+int wt4 = input.time(0, "Точка 4", confirm = false, group = GE)
+int wt5 = input.time(0, "Точка 5 (конец волны)", confirm = false, group = GE)
+float k4 = input.float(0.35, "k: волна 4 «у нуля», если |экстремум 4| < k x пик 3", minval = 0.05, maxval = 1.0, step = 0.05, group = GE,
+     tooltip = "Порог для шаблона «импульс»: спидометр в волне 4 должен вернуться к нулю — модуль его экстремума против направления меньше k от пика волны 3.")
+bool showPts = input.bool(true, "Подписать точки 0-5 на графике цены", group = GE)
+string wavePosIn = input.string(POS_BR, "Положение таблицы анализа", options = [POS_TL, POS_TC, POS_TR, POS_ML, POS_MR, POS_BL, POS_BC, POS_BR], group = GE)
+
+var array<int> wT = array.from(wt0, wt1, wt2, wt3, wt4, wt5)
+var array<bool> ptDone = array.new<bool>(6, false)
+var array<int> ptBar = array.new<int>(6, na)
+var array<float> ptHi = array.new<float>(6, na)
+var array<float> ptLo = array.new<float>(6, na)
+var array<float> ptCl = array.new<float>(6, na)
+var array<float> sMax = array.new<float>(5, na)     // максимум спидометра в отрезке (волна k = индекс k-1)
+var array<float> sMin = array.new<float>(5, na)     // минимум спидометра в отрезке
+var array<int> sBars = array.new<int>(5, 0)         // баров в отрезке (концы входят в оба соседних)
+
+int tcNow = na(time_close) ? time : time_close
+if waveOn
+    // фиксированный цикл по 6 точкам (не по истории)
+    for i = 0 to 5
+        int ti = wT.get(i)
+        if ti > 0 and not ptDone.get(i) and tcNow > ti
+            ptDone.set(i, true)
+            ptBar.set(i, bar_index)
+            ptHi.set(i, high)
+            ptLo.set(i, low)
+            ptCl.set(i, close)
+    for k = 1 to 5
+        bool inSeg = ptDone.get(k - 1) and (not ptDone.get(k) or ptBar.get(k) == bar_index)
+        if inSeg
+            int j = k - 1
+            sBars.set(j, sBars.get(j) + 1)
+            if not na(macdV)
+                sMax.set(j, na(sMax.get(j)) ? macdV : math.max(sMax.get(j), macdV))
+                sMin.set(j, na(sMin.get(j)) ? macdV : math.min(sMin.get(j), macdV))
+
+// Стандартные ТФ для совета по правилу 100-140.
+var array<int> TF_SEC = array.from(60, 180, 300, 900, 1800, 2700, 3600, 7200, 10800, 14400, 21600, 28800, 43200, 86400, 172800, 259200, 604800, 1209600, 2592000, 7776000)
+var array<string> TF_NAME = array.from("1м", "3м", "5м", "15м", "30м", "45м", "1ч", "2ч", "3ч", "4ч", "6ч", "8ч", "12ч", "1Д", "2Д", "3Д", "1Н", "2Н", "1М", "3М")
+
+// Правило 100-140: целевой ТФ = текущий x n / 120, ближайший стандартный (в лог-шкале)
+// строго меньше текущего (баров мало) или строго больше (баров много).
+f_advice(int n) =>
+    string res = str.tostring(n) + " баров — в норме (100–140)"
+    if n < 100 or n > 140
+        int cur = timeframe.in_seconds()
+        float factor = n / 120.0
+        float target = math.max(cur * factor, 1.0)
+        bool small = n < 100
+        string best = ""
+        float bestD = 1e18
+        for i = 0 to TF_SEC.size() - 1
+            int s = TF_SEC.get(i)
+            if small ? s < cur : s > cur
+                float d = math.abs(math.log(s) - math.log(target))
+                if d < bestD
+                    bestD := d
+                    best := TF_NAME.get(i)
+        string why = small ? "мало баров: индикатор покажет волну старшей степени" : "много баров: индикатор разобьёт волну на младшие"
+        string mult = small ? "≈ ÷" + str.tostring(1.0 / factor, "0.0") : "≈ ×" + str.tostring(factor, "0.0")
+        res := str.tostring(n) + " баров — " + why + "; " + (best == "" ? "подходящего стандартного ТФ нет" : mult + " → используйте " + best)
+    res
+
+// Классификация профиля скорости. a1, a3, a5 — пики в направлении волны (со знаком направления),
+// c4 — экстремум волны 4 против направления.
+f_classify(float a1, float a3, float a5, float c4, float k) =>
+    string res = "неопределённо"
+    if not (na(a1) or na(a3) or na(a5) or na(c4))
+        if a3 > a1 and a3 > a5 and a3 > 0
+            res := math.abs(c4) < k * a3 ? "импульс" : "неопределённо (волна 4 не вернулась к нулю)"
+        else if a1 > a3 and a3 > a5
+            res := "сужающаяся диагональ"
+        else if a1 < a3 and a3 < a5
+            res := "расширяющаяся диагональ"
+    res
+
+f_num(float v, string fmt) =>
+    na(v) ? "—" : str.tostring(v, fmt)
+
+var table waveTbl = table.new(f_pos(wavePosIn), 6, 13, border_width = 1)
+var array<label> ptLabels = array.new<label>()
+
+f_cell(int c, int r, string txt, color tc, color bg) =>
+    table.cell(waveTbl, c, r, txt, text_color = tc, bgcolor = bg, text_size = size.small)
+
+f_row(int r, string txt, color tc, color bg) =>
+    f_cell(0, r, txt, tc, bg)
+    table.merge_cells(waveTbl, 0, r, 5, r)
+
+if barstate.islast and waveOn
+    table.clear(waveTbl, 0, 0, 5, 12)
+    while ptLabels.size() > 0
+        ptLabels.pop().delete()
+    int t0 = wT.get(0)
+    int t5 = wT.get(5)
+    string err = ""
+    if t0 == 0 or t5 == 0
+        err := "Задайте время точек 0 и 5 в настройках («Анализ волны»)."
+    else if t5 <= t0
+        err := "Точка 5 должна быть позже точки 0."
+    else if not ptDone.get(0) or not ptDone.get(5)
+        err := "Точка 0 или 5 вне загруженной истории (или ещё не наступила)."
+    f_row(0, "Анализ волны · профиль скорости, не разметка", C_TBL_TX, C_TBL_HD)
+    if err != ""
+        f_row(1, err, C_DN, C_TBL_BG)
+    else
+        int n = ptBar.get(5) - ptBar.get(0)
+        bool ruleOk = n >= 100 and n <= 140
+        f_row(1, "Правило 100–140: " + f_advice(n), ruleOk ? C_TBL_TX : C_DN, C_TBL_BG)
+        bool full = useInner and wT.get(1) > 0 and wT.get(2) > 0 and wT.get(3) > 0 and wT.get(4) > 0
+        string ferr = ""
+        if full
+            for i = 1 to 5
+                if wT.get(i) <= wT.get(i - 1) or not ptDone.get(i)
+                    ferr := "Точки 0-5 должны идти по времени и быть в загруженной истории."
+                else if ptBar.get(i) <= ptBar.get(i - 1)
+                    ferr := "Две точки попали на одну свечу — выберите младший ТФ."
+        if not full
+            f_row(2, "Заданы только точки 0 и 5: проверено только правило 100–140.", C_TBL_TX, C_TBL_BG)
+        else if ferr != ""
+            f_row(2, ferr, C_DN, C_TBL_BG)
+        else
+            int s = ptCl.get(5) > ptCl.get(0) ? 1 : -1
+            // цены точек: для восходящей волны 0,2,4 — low, 1,3,5 — high; для нисходящей наоборот
+            array<float> px = array.new<float>(6, na)
+            for i = 0 to 5
+                bool upPt = (i % 2 == 1) == (s == 1)
+                px.set(i, upPt ? ptHi.get(i) : ptLo.get(i))
+            array<float> peak = array.new<float>(5, na)
+            array<float> lens = array.new<float>(5, na)
+            for j = 0 to 4
+                bool impLeg = j % 2 == 0
+                float mx = sMax.get(j)
+                float mn = sMin.get(j)
+                peak.set(j, s == 1 ? (impLeg ? mx : mn) : (impLeg ? mn : mx))
+                lens.set(j, math.abs(math.log(px.get(j + 1)) - math.log(px.get(j))) * 100.0)
+            string prof = f_classify(s * peak.get(0), s * peak.get(2), s * peak.get(4), peak.get(3), k4)
+            f_cell(0, 2, "Волна", C_TBL_TX, C_TBL_HD)
+            f_cell(1, 2, "Баров", C_TBL_TX, C_TBL_HD)
+            f_cell(2, 2, "Пик спидометра", C_TBL_TX, C_TBL_HD)
+            f_cell(3, 2, "Объём/бар", C_TBL_TX, C_TBL_HD)
+            f_cell(4, 2, "Объём к 3", C_TBL_TX, C_TBL_HD)
+            f_cell(5, 2, "Длина, лог %", C_TBL_TX, C_TBL_HD)
+            for j = 0 to 4
+                float pk = peak.get(j)
+                color pc = na(pk) ? C_TBL_TX : pk >= 0 ? C_UP : C_DN
+                f_cell(0, 3 + j, str.tostring(j + 1) + (j % 2 == 0 ? " (по ходу)" : " (против)"), C_TBL_TX, C_TBL_BG)
+                f_cell(1, 3 + j, str.tostring(sBars.get(j)), C_TBL_TX, C_TBL_BG)
+                f_cell(2, 3 + j, f_num(pk, "0.000") + unitTxt, pc, C_TBL_BG)
+                f_cell(3, 3 + j, "", C_TBL_TX, C_TBL_BG)
+                f_cell(4, 3 + j, "", C_TBL_TX, C_TBL_BG)
+                f_cell(5, 3 + j, f_num(lens.get(j), "0.00"), C_TBL_TX, C_TBL_BG)
+            f_row(8, "Профиль скорости: " + prof + " (направление " + (s == 1 ? "вверх" : "вниз") + ")", C_TBL_TX, C_TBL_HD)
+            float l1 = lens.get(0)
+            float l3 = lens.get(2)
+            string ratios = "Лог-соотношения: 3/1 = " + f_num(l1 > 0 ? l3 / l1 : na, "0.000") +
+                 ", 5/1 = " + f_num(l1 > 0 ? lens.get(4) / l1 : na, "0.000") +
+                 ", глубина 2 = " + f_num(l1 > 0 ? lens.get(1) / l1 : na, "0.000") +
+                 " от 1, глубина 4 = " + f_num(l3 > 0 ? lens.get(3) / l3 : na, "0.000") + " от 3"
+            f_row(9, ratios, C_TBL_TX, C_TBL_BG)
+            if showPts
+                for i = 0 to 5
+                    bool upPt = (i % 2 == 1) == (s == 1)
+                    ptLabels.push(label.new(ptBar.get(i), px.get(i), str.tostring(i), color = color.new(C_SIG, 20),
+                         textcolor = color.white, style = upPt ? label.style_label_down : label.style_label_up,
+                         size = size.small, force_overlay = true))
+    f_row(12, "Инструмент проверки разметки, не торговый сигнал.", C_TBL_TX, C_TBL_BG)
