@@ -212,3 +212,186 @@ if barstate.islast and showMtf
     f_mtfRow(mtfTbl, 1, tf1, m1, m1p, size.small)
     f_mtfRow(mtfTbl, 2, tf2, m2, m2p, size.small)
     f_mtfRow(mtfTbl, 3, tf3, m3, m3p, size.small)
+
+// ============================================================================
+// C. Дивергенции
+// Сигнал появляется с задержкой «баров справа»: пивот подтверждается только через
+// pR закрытых баров. Это не перерисовка (нарисованное не меняется), но и не опережение.
+// ============================================================================
+const string GC = "4. Дивергенции"
+const string S_LINE = "Линия MACD"
+const string S_HIST = "Гистограмма"
+const string S_AO = "AO"
+const string M_PAIR = "Пары пивотов"
+const string M_THREE = "Три пика (1-3-5)"
+const string M_BOTH = "Оба режима"
+
+bool showDiv = input.bool(true, "Показывать дивергенции", group = GC)
+string divSrcIn = input.string(S_LINE, "Источник", options = [S_LINE, S_HIST, S_AO], group = GC,
+     tooltip = "По какому ряду искать пивоты индикатора.")
+string divModeIn = input.string(M_PAIR, "Режим", options = [M_PAIR, M_THREE, M_BOTH], group = GC,
+     tooltip = "«Пары пивотов» — обычные и скрытые дивергенции между двумя соседними пивотами. «Три пика» — сравнение трёх последних пиков (например, волн 1-3-5): подпись «затухание», если каждый следующий пик слабее, и «возрастание», если сильнее, при этом цена обновляет экстремумы.")
+bool showReg = input.bool(true, "Обычные", group = GC, inline = "dk")
+bool showHid = input.bool(true, "Скрытые", group = GC, inline = "dk")
+int pL = input.int(5, "Пивот: баров слева", minval = 1, maxval = 50, group = GC, inline = "pv")
+int pR = input.int(5, "справа", minval = 1, maxval = 50, group = GC, inline = "pv",
+     tooltip = "Баров справа = задержка сигнала. Дивергенция рисуется через столько закрытых баров после пивота.")
+int minDist = input.int(5, "Расстояние между пивотами: мин.", minval = 1, group = GC, inline = "ds")
+int maxDist = input.int(80, "макс.", minval = 2, group = GC, inline = "ds")
+int priceWin = input.int(2, "Окно поиска экстремума цены, баров в каждую сторону", minval = 0, maxval = 50, group = GC,
+     tooltip = "Цена сравнивается по минимуму low (для впадин) или максимуму high (для пиков) в окне вокруг пивота индикатора, а не по close. Окно не может быть больше «баров справа».")
+bool zeroFilter = input.bool(true, "Обычные: бычьи только ниже нуля, медвежьи — выше", group = GC,
+     tooltip = "Фильтр применяется к обычным дивергенциям (оба пивота по одну сторону нуля). Скрытые дивергенции — признак продолжения тренда, их пивоты бывают по любую сторону нуля, фильтр к ним не применяется.")
+float minDiffPct = input.float(5.0, "Мин. разница значений индикатора, % от диапазона", minval = 0.0, maxval = 100.0, step = 0.5, group = GC,
+     tooltip = "Отсекает шумовые дивергенции: |разница двух пивотов| должна быть не меньше этой доли от (максимум - минимум) индикатора за период ниже.")
+int rangeLen = input.int(200, "Период диапазона индикатора, баров", minval = 10, group = GC)
+bool divOnPrice = input.bool(false, "Дублировать на графике цены", group = GC,
+     tooltip = "Линии и метки дивергенций рисуются и на основном графике (force_overlay).")
+int maxDivObj = input.int(40, "Хранить последних дивергенций", minval = 1, maxval = 100, group = GC,
+     tooltip = "Старые линии и метки удаляются (массив + delete), чтобы не упереться в лимит объектов (500).")
+
+bool modePairs = divModeIn != M_THREE
+bool modeThree = divModeIn != M_PAIR
+
+float osc = divSrcIn == S_LINE ? macdV : divSrcIn == S_HIST ? histV : aoV
+
+// Все ta.* — на глобальном уровне, на каждом баре.
+int wEff = math.min(priceWin, pR)
+float phV = ta.pivothigh(osc, pL, pR)
+float plV = ta.pivotlow(osc, pL, pR)
+float loWin = ta.lowest(low, 2 * wEff + 1)
+float hiWin = ta.highest(high, 2 * wEff + 1)
+float pxLoAtPivot = loWin[pR - wEff]    // минимум low в [пивот - w; пивот + w]
+float pxHiAtPivot = hiWin[pR - wEff]    // максимум high в [пивот - w; пивот + w]
+float oscRange = ta.highest(osc, rangeLen) - ta.lowest(osc, rangeLen)
+
+// Состояние: три последних пивота каждого типа (бар, значение индикатора, цена).
+var array<int> loBar = array.new<int>()
+var array<float> loOsc = array.new<float>()
+var array<float> loPx = array.new<float>()
+var array<int> hiBar = array.new<int>()
+var array<float> hiOsc = array.new<float>()
+var array<float> hiPx = array.new<float>()
+
+var array<line> divLines = array.new<line>()
+var array<label> divLabels = array.new<label>()
+
+f_keepLine(array<line> arr, line ln, int maxN) =>
+    arr.push(ln)
+    if arr.size() > maxN
+        arr.shift().delete()
+
+f_keepLabel(array<label> arr, label lb, int maxN) =>
+    arr.push(lb)
+    if arr.size() > maxN
+        arr.shift().delete()
+
+f_pushPivot(array<int> b, array<float> o, array<float> p, int bar, float ov, float pv) =>
+    b.push(bar)
+    o.push(ov)
+    p.push(pv)
+    if b.size() > 3
+        b.shift()
+        o.shift()
+        p.shift()
+
+color C_BULL = C_UP
+color C_BEAR = C_DN
+
+// Рисует дивергенцию: на панели (по значениям индикатора) и, опционально, на цене.
+// Обычные — сплошная линия, скрытые — пунктир; тип подписан текстом (цвет не единственный носитель смысла).
+f_drawDiv(int x1, float y1, int x2, float y2, float px1, float px2, bool bull, bool hidden, string txt) =>
+    color c = bull ? C_BULL : C_BEAR
+    string st = hidden ? line.style_dashed : line.style_solid
+    string lst = bull ? label.style_label_up : label.style_label_down
+    int keepN = maxDivObj * (divOnPrice ? 4 : 2)
+    f_keepLine(divLines, line.new(x1, y1, x2, y2, color = c, style = st, width = 2), keepN)
+    if txt != ""
+        f_keepLabel(divLabels, label.new(x2, y2, txt, color = color.new(c, 15), textcolor = color.white, style = lst, size = size.tiny), keepN)
+    if divOnPrice
+        f_keepLine(divLines, line.new(x1, px1, x2, px2, color = c, style = st, width = 2, force_overlay = true), keepN)
+        if txt != ""
+            f_keepLabel(divLabels, label.new(x2, px2, txt, color = color.new(c, 15), textcolor = color.white, style = lst, size = size.tiny, force_overlay = true), keepN)
+
+bool bullReg = false
+bool bullHid = false
+bool bearReg = false
+bool bearHid = false
+bool threeFade = false
+bool threeGrow = false
+
+// --- впадины индикатора: бычьи дивергенции
+if not na(plV)
+    int cb = bar_index - pR
+    float co = plV
+    float cp = pxLoAtPivot
+    if loBar.size() > 0 and modePairs and not na(cp)
+        int pb = loBar.last()
+        float po = loOsc.last()
+        float pp = loPx.last()
+        int dist = cb - pb
+        bool distOk = dist >= minDist and dist <= maxDist
+        bool diffOk = not na(oscRange) and math.abs(co - po) >= minDiffPct / 100.0 * oscRange
+        bool zeroOk = not zeroFilter or (co < 0 and po < 0)
+        if distOk and diffOk
+            if showReg and zeroOk and cp < pp and co > po
+                bullReg := true
+                if showDiv
+                    f_drawDiv(pb, po, cb, co, pp, cp, true, false, "Бычья")
+            if showHid and cp > pp and co < po
+                bullHid := true
+                if showDiv
+                    f_drawDiv(pb, po, cb, co, pp, cp, true, true, "Скр. бычья")
+    f_pushPivot(loBar, loOsc, loPx, cb, co, cp)
+    if modeThree and loBar.size() == 3 and not na(loPx.get(0)) and not na(loPx.get(1)) and not na(cp)
+        float o1 = loOsc.get(0)
+        float o2 = loOsc.get(1)
+        float p1 = loPx.get(0)
+        float p2 = loPx.get(1)
+        if p1 > p2 and p2 > cp
+            bool fade = o1 < o2 and o2 < co
+            bool grow = o1 > o2 and o2 > co
+            if fade or grow
+                threeFade := threeFade or fade
+                threeGrow := threeGrow or grow
+                if showDiv
+                    f_drawDiv(loBar.get(0), o1, loBar.get(1), o2, p1, p2, true, not fade, "")
+                    f_drawDiv(loBar.get(1), o2, cb, co, p2, cp, true, not fade, fade ? "Затухание" : "Возрастание")
+
+// --- пики индикатора: медвежьи дивергенции
+if not na(phV)
+    int cb = bar_index - pR
+    float co = phV
+    float cp = pxHiAtPivot
+    if hiBar.size() > 0 and modePairs and not na(cp)
+        int pb = hiBar.last()
+        float po = hiOsc.last()
+        float pp = hiPx.last()
+        int dist = cb - pb
+        bool distOk = dist >= minDist and dist <= maxDist
+        bool diffOk = not na(oscRange) and math.abs(co - po) >= minDiffPct / 100.0 * oscRange
+        bool zeroOk = not zeroFilter or (co > 0 and po > 0)
+        if distOk and diffOk
+            if showReg and zeroOk and cp > pp and co < po
+                bearReg := true
+                if showDiv
+                    f_drawDiv(pb, po, cb, co, pp, cp, false, false, "Медвежья")
+            if showHid and cp < pp and co > po
+                bearHid := true
+                if showDiv
+                    f_drawDiv(pb, po, cb, co, pp, cp, false, true, "Скр. медвежья")
+    f_pushPivot(hiBar, hiOsc, hiPx, cb, co, cp)
+    if modeThree and hiBar.size() == 3 and not na(hiPx.get(0)) and not na(hiPx.get(1)) and not na(cp)
+        float o1 = hiOsc.get(0)
+        float o2 = hiOsc.get(1)
+        float p1 = hiPx.get(0)
+        float p2 = hiPx.get(1)
+        if p1 < p2 and p2 < cp
+            bool fade = o1 > o2 and o2 > co
+            bool grow = o1 < o2 and o2 < co
+            if fade or grow
+                threeFade := threeFade or fade
+                threeGrow := threeGrow or grow
+                if showDiv
+                    f_drawDiv(hiBar.get(0), o1, hiBar.get(1), o2, p1, p2, false, not fade, "")
+                    f_drawDiv(hiBar.get(1), o2, cb, co, p2, cp, false, not fade, fade ? "Затухание" : "Возрастание")
