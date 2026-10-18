@@ -11,6 +11,36 @@ indicator("TW Спидометр Pro", shorttitle = "TW Спидометр", ove
      max_lines_count = 500, max_labels_count = 500, max_boxes_count = 500)
 
 // ============================================================================
+// H. Интерфейс: тема и палитра (объявлены первыми — от них зависят цвета всех модулей)
+// ============================================================================
+const string GH = "0. Интерфейс"
+const string T_AUTO = "Авто (по фону графика)"
+const string T_LIGHT = "Светлая"
+const string T_DARK = "Тёмная"
+const string SZ_S = "Мелкий"
+const string SZ_M = "Средний"
+const string SZ_L = "Крупный"
+string themeIn = input.string(T_AUTO, "Тема", options = [T_AUTO, T_LIGHT, T_DARK], group = GH,
+     tooltip = "«Авто» определяет тему по яркости фона графика (chart.bg_color). Цвета подобраны из палитры Okabe-Ito, различимой при дальтонизме; смысл дублируется подписями и стилем линий.")
+string tblSizeIn = input.string(SZ_M, "Размер текста таблиц", options = [SZ_S, SZ_M, SZ_L], group = GH)
+
+color bgC = chart.bg_color
+bool autoDark = color.r(bgC) * 0.299 + color.g(bgC) * 0.587 + color.b(bgC) * 0.114 < 128
+bool isDark = themeIn == T_AUTO ? autoDark : themeIn == T_DARK
+string tblSize = tblSizeIn == SZ_S ? size.tiny : tblSizeIn == SZ_M ? size.small : size.normal
+
+// Палитра Okabe-Ito: синий — выше нуля / бычье, оранжевый — ниже нуля / медвежье.
+color C_UP = isDark ? #56B4E9 : #0072B2
+color C_DN = isDark ? #E69F00 : #D55E00
+color C_AO_UP = #009E73
+color C_AO_DN = #CC79A7
+color C_SIG = isDark ? #BDBDBD : #616161
+color C_HTF = isDark ? #F0E442 : #000000
+color C_TBL_BG = isDark ? color.new(#1E222D, 5) : color.new(#F0F3FA, 5)
+color C_TBL_HD = isDark ? #2A2E39 : #DDE2EC
+color C_TBL_TX = isDark ? #D1D4DC : #131722
+
+// ============================================================================
 // A. Ядро
 // ============================================================================
 const string GA = "1. Спидометр (ядро)"
@@ -65,13 +95,6 @@ bool showLine = isCustom ? cLine : dispIn == D_ALL or dispIn == D_LINE
 bool showSig = isCustom ? cSig : dispIn == D_ALL
 bool showHist = isCustom ? cHist : dispIn == D_ALL or dispIn == D_HIST
 bool showAO = isCustom ? cAO : dispIn == D_AO
-
-// Палитра Okabe-Ito (различима при дальтонизме): синий — выше нуля, оранжево-красный — ниже.
-color C_UP = #0072B2
-color C_DN = #D55E00
-color C_AO_UP = #009E73
-color C_AO_DN = #CC79A7
-color C_SIG = #7F7F7F
 
 // Перевод цены в единицы спидометра: 100 * ln(x) — проценты, иначе цена как есть.
 f_tr(float x, bool lg) =>
@@ -155,11 +178,6 @@ f_pos(string p) =>
         POS_BC => position.bottom_center
         => position.bottom_right
 
-// Цвета таблиц (в модуле H зависят от темы).
-color C_TBL_BG = color.new(color.gray, 85)
-color C_TBL_HD = color.new(color.gray, 70)
-color C_TBL_TX = color.gray
-
 // Защита от перерисовки (идиома из руководства Pine): на исторических барах — значение
 // предыдущей закрытой свечи старшего ТФ ([1] на текущем ТФ), в реальном времени —
 // значение [1] самого старшего ТФ. lookahead всегда выключен.
@@ -191,7 +209,7 @@ f_phase(float cur, float prev) =>
 string unitTxt = byAtr ? " ATR" : useLog ? " %" : ""
 
 float htfV = htfIn == H_1 ? m1 : htfIn == H_2 ? m2 : htfIn == H_3 ? m3 : na
-plot(htfV, "Спидометр старшего ТФ", color = color.new(#E69F00, 0), linewidth = 2, style = plot.style_stepline)
+plot(htfV, "Спидометр старшего ТФ", color = C_HTF, linewidth = 2, style = plot.style_stepline)
 
 var table mtfTbl = table.new(f_pos(mtfPosIn), 3, 4, border_width = 1)
 
@@ -206,12 +224,12 @@ f_mtfRow(table t, int row, string tf, float cur, float prev, string tsize) =>
     table.cell(t, 2, row, phTxt, text_color = tc, bgcolor = C_TBL_BG, text_size = tsize)
 
 if barstate.islast and showMtf
-    table.cell(mtfTbl, 0, 0, "ТФ", text_color = C_TBL_TX, bgcolor = C_TBL_HD, text_size = size.small)
-    table.cell(mtfTbl, 1, 0, "Спидометр", text_color = C_TBL_TX, bgcolor = C_TBL_HD, text_size = size.small)
-    table.cell(mtfTbl, 2, 0, "Фаза скорости", text_color = C_TBL_TX, bgcolor = C_TBL_HD, text_size = size.small)
-    f_mtfRow(mtfTbl, 1, tf1, m1, m1p, size.small)
-    f_mtfRow(mtfTbl, 2, tf2, m2, m2p, size.small)
-    f_mtfRow(mtfTbl, 3, tf3, m3, m3p, size.small)
+    table.cell(mtfTbl, 0, 0, "ТФ", text_color = C_TBL_TX, bgcolor = C_TBL_HD, text_size = tblSize)
+    table.cell(mtfTbl, 1, 0, "Спидометр", text_color = C_TBL_TX, bgcolor = C_TBL_HD, text_size = tblSize)
+    table.cell(mtfTbl, 2, 0, "Фаза скорости", text_color = C_TBL_TX, bgcolor = C_TBL_HD, text_size = tblSize)
+    f_mtfRow(mtfTbl, 1, tf1, m1, m1p, tblSize)
+    f_mtfRow(mtfTbl, 2, tf2, m2, m2p, tblSize)
+    f_mtfRow(mtfTbl, 3, tf3, m3, m3p, tblSize)
 
 // ============================================================================
 // C. Дивергенции
@@ -591,7 +609,7 @@ var table waveTbl = table.new(f_pos(wavePosIn), 6, 13, border_width = 1)
 var array<label> ptLabels = array.new<label>()
 
 f_cell(int c, int r, string txt, color tc, color bg) =>
-    table.cell(waveTbl, c, r, txt, text_color = tc, bgcolor = bg, text_size = size.small)
+    table.cell(waveTbl, c, r, txt, text_color = tc, bgcolor = bg, text_size = tblSize)
 
 f_row(int r, string txt, color tc, color bg) =>
     f_cell(0, r, txt, tc, bg)
