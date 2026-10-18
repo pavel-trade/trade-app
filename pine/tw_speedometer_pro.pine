@@ -1,0 +1,119 @@
+//@version=6
+// ============================================================================
+// TW Спидометр Pro
+// Проверка волновой разметки Эллиотта через скорость цены.
+// Спидометр = линейный MACD: EMA(fast) - EMA(slow) от 100 * ln(цены), значения в %.
+// Источники идеи: tradewaves.ru/teoriya/macd/, Б. Вильямс (AO 5/34), исследования pr0 / RSWA.
+// Это инструмент ПРОВЕРКИ разметки, а не торговая система: сигналов покупки/продажи нет.
+// Эталон для сверки значений: reference/speedometer.py
+// ============================================================================
+indicator("TW Спидометр Pro", shorttitle = "TW Спидометр", overlay = false, precision = 3,
+     max_lines_count = 500, max_labels_count = 500, max_boxes_count = 500)
+
+// ============================================================================
+// A. Ядро
+// ============================================================================
+const string GA = "1. Спидометр (ядро)"
+const string P_W = "Williams 5/34/5"
+const string P_B = "Крупная фигура 13/55/13"
+const string P_C = "Классика 12/26/9"
+const string P_U = "Свои"
+const string N_PCT = "% от логарифма (как есть)"
+const string N_ATR = "В единицах ATR"
+
+string presetIn = input.string(P_W, "Пресет периодов", options = [P_W, P_B, P_C, P_U], group = GA,
+     tooltip = "Williams 5/34/5 — основной спидометр по методике. 13/55/13 — для крупных фигур. 12/26/9 — классический MACD. «Свои» — периоды из трёх полей ниже.")
+int fastIn = input.int(5, "Быстрая EMA (для «Свои»)", minval = 1, group = GA,
+     tooltip = "Используется только при пресете «Свои».")
+int slowIn = input.int(34, "Медленная EMA (для «Свои»)", minval = 2, group = GA,
+     tooltip = "Используется только при пресете «Свои». Должна быть больше быстрой.")
+int sigIn = input.int(5, "Сигнальная EMA (для «Свои»)", minval = 1, group = GA,
+     tooltip = "Используется только при пресете «Свои».")
+bool useLog = input.bool(true, "Считать от логарифма цены (x100, значения в %)", group = GA,
+     tooltip = "Включено (по умолчанию): источник = 100 * ln(close). Тогда MACD показывает разницу средних в процентах, и пики сравнимы при любом уровне цены (BTC 20k и 120k). Выключено: MACD в единицах цены.")
+string normIn = input.string(N_PCT, "Нормировка", options = [N_PCT, N_ATR], group = GA,
+     tooltip = "«% от логарифма» — значения как есть. «В единицах ATR» — MACD, сигнальная, гистограмма и AO делятся на ATR в тех же единицах: удобно сравнивать разные инструменты.")
+int atrLen = input.int(14, "Период ATR (для нормировки)", minval = 1, group = GA,
+     tooltip = "ATR считается как RMA истинного диапазона в тех же единицах, что и MACD (логарифм или цена).")
+int aoFast = input.int(5, "AO: быстрая SMA", minval = 1, group = GA, inline = "ao",
+     tooltip = "Awesome Oscillator Б. Вильямса: SMA(5) - SMA(34) от медианы hl2 (от логарифма x100, если он включён).")
+int aoSlow = input.int(34, "медленная", minval = 2, group = GA, inline = "ao")
+
+int fastLen = presetIn == P_W ? 5 : presetIn == P_B ? 13 : presetIn == P_C ? 12 : fastIn
+int slowLen = presetIn == P_W ? 34 : presetIn == P_B ? 55 : presetIn == P_C ? 26 : slowIn
+int sigLen = presetIn == P_W ? 5 : presetIn == P_B ? 13 : presetIn == P_C ? 9 : sigIn
+bool byAtr = normIn == N_ATR
+
+const string GD = "2. Отображение"
+const string D_ALL = "Линия + сигнальная + гистограмма"
+const string D_LINE = "Только линия"
+const string D_HIST = "Только гистограмма"
+const string D_AO = "Только AO"
+const string D_CUSTOM = "Свои (переключатели ниже)"
+string dispIn = input.string(D_ALL, "Пресет отображения", options = [D_ALL, D_LINE, D_HIST, D_AO, D_CUSTOM], group = GD,
+     tooltip = "Чтобы держать линию и гистограмму на разных панелях, добавьте индикатор дважды: в одном выберите «Только линия», в другом — «Только гистограмма». Переключатели ниже работают только в режиме «Свои».")
+bool cLine = input.bool(true, "Линия MACD (столбики)", group = GD, inline = "d1")
+bool cSig = input.bool(true, "Сигнальная", group = GD, inline = "d1")
+bool cHist = input.bool(true, "Гистограмма", group = GD, inline = "d2")
+bool cAO = input.bool(false, "AO", group = GD, inline = "d2")
+bool phaseCol = input.bool(true, "Цвет по фазе", group = GD,
+     tooltip = "Яркий цвет — скорость растёт (столбик дальше от нуля, чем предыдущий), бледный — скорость падает. Как у AO.")
+int paleTr = input.int(65, "Прозрачность бледного цвета, %", minval = 0, maxval = 95, group = GD)
+
+bool isCustom = dispIn == D_CUSTOM
+bool showLine = isCustom ? cLine : dispIn == D_ALL or dispIn == D_LINE
+bool showSig = isCustom ? cSig : dispIn == D_ALL
+bool showHist = isCustom ? cHist : dispIn == D_ALL or dispIn == D_HIST
+bool showAO = isCustom ? cAO : dispIn == D_AO
+
+// Палитра Okabe-Ito (различима при дальтонизме): синий — выше нуля, оранжево-красный — ниже.
+color C_UP = #0072B2
+color C_DN = #D55E00
+color C_AO_UP = #009E73
+color C_AO_DN = #CC79A7
+color C_SIG = #7F7F7F
+
+// Перевод цены в единицы спидометра: 100 * ln(x) — проценты, иначе цена как есть.
+f_tr(float x, bool lg) =>
+    lg ? 100.0 * math.log(x) : x
+
+// Ядро спидометра: [MACD, сигнальная, гистограмма, AO] в выбранной нормировке.
+// Все ta.* вызываются безусловно при каждом вызове функции (функция вызывается на каждом баре).
+f_core(bool lg, int fLen, int sLen, int gLen, bool atrMode, int aLen, int aoF, int aoS) =>
+    float srcS = f_tr(close, lg)
+    float hiS = f_tr(high, lg)
+    float loS = f_tr(low, lg)
+    float medS = f_tr(hl2, lg)
+    float macdRaw = ta.ema(srcS, fLen) - ta.ema(srcS, sLen)
+    float prevS = srcS[1]
+    float trS = na(prevS) ? hiS - loS : math.max(hiS - loS, math.abs(hiS - prevS), math.abs(loS - prevS))
+    float atrS = ta.rma(trS, aLen)
+    float aoRaw = ta.sma(medS, aoF) - ta.sma(medS, aoS)
+    float kN = atrMode ? (atrS > 0 ? 1.0 / atrS : na) : 1.0
+    float m = macdRaw * kN
+    float g = ta.ema(m, gLen)
+    [m, g, m - g, aoRaw * kN]
+
+[macdV, sigV, histV, aoV] = f_core(useLog, fastLen, slowLen, sigLen, byAtr, atrLen, aoFast, aoSlow)
+
+// Цвет по фазе: яркий — скорость (модуль) растёт, бледный — падает.
+f_phaseCol(float v, float prev, color up, color dn) =>
+    color base = v >= 0 ? up : dn
+    bool faster = v >= 0 ? v > prev : v < prev
+    phaseCol and not faster ? color.new(base, paleTr) : base
+
+color colLine = f_phaseCol(macdV, macdV[1], C_UP, C_DN)
+color colHist = f_phaseCol(histV, histV[1], C_UP, C_DN)
+color colAO = f_phaseCol(aoV, aoV[1], C_AO_UP, C_AO_DN)
+
+plot(showLine ? macdV : na, "Линия MACD", color = colLine, style = plot.style_columns)
+plot(showHist ? histV : na, "Гистограмма", color = colHist, style = plot.style_histogram, linewidth = 3)
+plot(showSig ? sigV : na, "Сигнальная", color = C_SIG, linewidth = 1)
+plot(showAO ? aoV : na, "AO", color = colAO, style = plot.style_columns)
+hline(0, "Ноль", color = color.new(color.gray, 40), linestyle = hline.style_dotted)
+
+// Значения для сверки с reference/speedometer.py (видны в окне данных, на панели не рисуются).
+plot(macdV, "Сверка: MACD", display = display.data_window)
+plot(sigV, "Сверка: сигнальная", display = display.data_window)
+plot(histV, "Сверка: гистограмма", display = display.data_window)
+plot(aoV, "Сверка: AO", display = display.data_window)
