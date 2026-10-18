@@ -1,0 +1,190 @@
+//@version=6
+// ============================================================================
+// TW Слепая зона Pro
+// Индикатор на графике цены к «TW Спидометр Pro».
+// Слепая зона — участок от экстремума цены текущего режима (EMA fast выше/ниже EMA slow)
+// до пересечения EMA fast/slow. Пока пересечения нет, линейный MACD показывает старый тренд.
+// Источники идеи: tradewaves.ru/teoriya/macd/, Б. Вильямс, исследования pr0 / RSWA.
+// Это инструмент ПРОВЕРКИ разметки, а не торговая система.
+// Эталон для сверки: reference/speedometer.py (функция blind_zones).
+// ============================================================================
+indicator("TW Слепая зона Pro", shorttitle = "TW Слепая зона", overlay = true, max_boxes_count = 500)
+
+// ----------------------------------------------------------------------------
+// Интерфейс и палитра (объявлены первыми — от них зависят цвета)
+// ----------------------------------------------------------------------------
+const string GH = "0. Интерфейс"
+const string T_AUTO = "Авто (по фону графика)"
+const string T_LIGHT = "Светлая"
+const string T_DARK = "Тёмная"
+string themeIn = input.string(T_AUTO, "Тема", options = [T_AUTO, T_LIGHT, T_DARK], group = GH,
+     tooltip = "«Авто» определяет тему по яркости фона графика (chart.bg_color). Палитра Okabe-Ito различима при дальтонизме; зоны дополнительно подписаны текстом.")
+color bgC = chart.bg_color
+bool autoDark = color.r(bgC) * 0.299 + color.g(bgC) * 0.587 + color.b(bgC) * 0.114 < 128
+bool isDark = themeIn == T_AUTO ? autoDark : themeIn == T_DARK
+color C_UP = isDark ? #56B4E9 : #0072B2
+color C_DN = isDark ? #E69F00 : #D55E00
+color C_TX = isDark ? #D1D4DC : #131722
+
+// ----------------------------------------------------------------------------
+// 1. EMA fast / slow
+// ----------------------------------------------------------------------------
+const string G1 = "1. EMA спидометра"
+int fastLen = input.int(5, "Быстрая EMA", minval = 1, group = G1, inline = "e")
+int slowLen = input.int(34, "медленная", minval = 2, group = G1, inline = "e",
+     tooltip = "Те же периоды, что у спидометра (Williams 5/34). Пересечение этих EMA = переход линии MACD через ноль.")
+bool useLog = input.bool(true, "EMA от логарифма цены", group = G1,
+     tooltip = "Включено: EMA считается от ln(close) и переводится обратно в цену (геометрическое среднее) — как в спидометре. Выключено: обычные EMA от close.")
+bool showEma = input.bool(true, "Показывать EMA", group = G1, inline = "s")
+bool showFill = input.bool(true, "Заливка между EMA", group = G1, inline = "s")
+
+float src = useLog ? 100.0 * math.log(close) : close
+float emaF = ta.ema(src, fastLen)
+float emaS = ta.ema(src, slowLen)
+float emaFP = useLog ? math.exp(emaF / 100.0) : emaF     // в единицах цены для графика
+float emaSP = useLog ? math.exp(emaS / 100.0) : emaS
+
+// ----------------------------------------------------------------------------
+// 2. Слепые зоны — состояние «на ходу» через var, без циклов по истории
+// ----------------------------------------------------------------------------
+const string G2 = "2. Слепые зоны"
+bool showZones = input.bool(true, "Прямоугольники закрытых зон", group = G2,
+     tooltip = "Зона рисуется, когда пересечение уже произошло: от бара экстремума режима до бара пересечения, по высоте — от экстремума до противоположной границы (минимум low после максимума или максимум high после минимума).")
+bool showLive = input.bool(true, "Текущая (незакрытая) зона", group = G2,
+     tooltip = "Пунктирный прямоугольник от последнего экстремума режима до текущего бара. Если цена обновит экстремум, левая граница сдвинется.")
+int maxZones = input.int(50, "Хранить последних зон", minval = 1, maxval = 400, group = G2)
+
+var int reg = 0             // 1 — EMA fast > slow, -1 — ниже
+var float ext = na          // экстремум режима
+var int extBar = na
+var float opp = na          // противоположная граница от экстремума до текущего бара
+float d = emaF - emaS
+int newReg = d > 0 ? 1 : d < 0 ? -1 : reg
+
+// обновление в старом режиме (бар пересечения тоже входит в зону)
+if reg == 1
+    if high > ext
+        ext := high
+        extBar := bar_index
+        opp := low
+    else
+        opp := math.min(opp, low)
+else if reg == -1
+    if low < ext
+        ext := low
+        extBar := bar_index
+        opp := high
+    else
+        opp := math.max(opp, high)
+
+bool zoneEnd = false
+int zReg = 0
+int zLeft = na
+float zExt = na
+float zOpp = na
+if newReg != reg and newReg != 0
+    if reg != 0
+        zoneEnd := true
+        zReg := reg
+        zLeft := extBar
+        zExt := ext
+        zOpp := opp
+    ext := newReg == 1 ? high : low
+    extBar := bar_index
+    opp := newReg == 1 ? low : high
+reg := newReg
+
+var array<box> zoneBoxes = array.new<box>()
+var box liveBox = na
+
+if showZones and zoneEnd
+    color zc = zReg == 1 ? C_UP : C_DN
+    float top = zReg == 1 ? zExt : zOpp
+    float bot = zReg == 1 ? zOpp : zExt
+    zoneBoxes.push(box.new(zLeft, top, bar_index, bot, border_color = color.new(zc, 40), bgcolor = color.new(zc, 85),
+         text = "слепая зона " + str.tostring(bar_index - zLeft) + " бар.", text_size = size.tiny,
+         text_color = color.new(C_TX, 20), text_valign = text.align_top, text_halign = text.align_left))
+    if zoneBoxes.size() > maxZones
+        zoneBoxes.shift().delete()
+
+if barstate.islast and showLive and reg != 0
+    color lc = reg == 1 ? C_UP : C_DN
+    float top = reg == 1 ? ext : opp
+    float bot = reg == 1 ? opp : ext
+    if na(liveBox)
+        liveBox := box.new(extBar, top, bar_index, bot, border_style = line.style_dashed, text_size = size.tiny,
+             text_valign = text.align_top, text_halign = text.align_left)
+    box.set_lefttop(liveBox, extBar, top)
+    box.set_rightbottom(liveBox, bar_index, bot)
+    box.set_border_color(liveBox, color.new(lc, 30))
+    box.set_bgcolor(liveBox, color.new(lc, 92))
+    box.set_text(liveBox, "слепая зона? " + str.tostring(bar_index - extBar) + " бар. от экстремума")
+    box.set_text_color(liveBox, color.new(C_TX, 20))
+
+// ----------------------------------------------------------------------------
+// 3. Опорные средние — считаются на каждом баре, показ по переключателям
+// ----------------------------------------------------------------------------
+const string G3 = "3. Опорные средние"
+bool showSma200 = input.bool(true, "SMA 200", group = G3, inline = "m")
+bool showEma20 = input.bool(false, "EMA 20", group = G3, inline = "m")
+bool showEma50 = input.bool(false, "EMA 50", group = G3, inline = "m")
+float sma200 = ta.sma(close, 200)
+float ema20 = ta.ema(close, 20)
+float ema50 = ta.ema(close, 50)
+
+// ----------------------------------------------------------------------------
+// 4. Anchored VWAP
+// ----------------------------------------------------------------------------
+const string G4 = "4. Anchored VWAP"
+bool showVwap = input.bool(false, "Anchored VWAP", group = G4,
+     tooltip = "VWAP по hlc3 от выбранной даты. Начинается с бара, содержащего эту дату. Без объёма не рисуется.")
+// 1789430400000 = 15.09.2026 00:00 UTC (defval должен быть const int, timestamp() сюда нельзя)
+int anchorT = input.time(1789430400000, "Дата привязки", confirm = false, group = G4)
+
+var bool avOn = false
+var float avPV = 0.0
+var float avV = 0.0
+int tcNow = na(time_close) ? time : time_close
+if not avOn and tcNow > anchorT
+    avOn := true
+if avOn
+    float vv = nz(volume)
+    avPV += hlc3 * vv
+    avV += vv
+float avwap = avOn and avV > 0 ? avPV / avV : na
+
+// ----------------------------------------------------------------------------
+// Отрисовка
+// ----------------------------------------------------------------------------
+pF = plot(showEma ? emaFP : na, "EMA быстрая", color = C_UP, linewidth = 1)
+pS = plot(showEma ? emaSP : na, "EMA медленная", color = C_DN, linewidth = 2)
+fill(pF, pS, color = showFill ? (d > 0 ? color.new(C_UP, 85) : color.new(C_DN, 85)) : na, title = "Заливка EMA")
+plot(showSma200 ? sma200 : na, "SMA 200", color = color.new(C_TX, 20), linewidth = 2)
+plot(showEma20 ? ema20 : na, "EMA 20", color = color.new(#009E73, 0), linewidth = 1)
+plot(showEma50 ? ema50 : na, "EMA 50", color = color.new(#CC79A7, 0), linewidth = 1)
+plot(showVwap ? avwap : na, "Anchored VWAP", color = color.new(#F0E442, 0), linewidth = 2, style = plot.style_linebr)
+
+// ----------------------------------------------------------------------------
+// 5. Оповещения
+// ----------------------------------------------------------------------------
+const string G5 = "5. Оповещения"
+bool dynAlerts = input.bool(true, "Динамические оповещения alert()", group = G5,
+     tooltip = "Создайте оповещение с условием «Любой вызов функции alert()». Срабатывают только на закрытой свече.")
+
+bool crossUp = ta.crossover(emaF, emaS)
+bool crossDn = ta.crossunder(emaF, emaS)
+bool sma200Up = ta.crossover(close, sma200)
+bool sma200Dn = ta.crossunder(close, sma200)
+
+alertcondition(crossUp, "EMA fast пересекла slow вверх", "{{ticker}} {{interval}}: EMA fast/slow пересеклись вверх — слепая зона спада закончилась")
+alertcondition(crossDn, "EMA fast пересекла slow вниз", "{{ticker}} {{interval}}: EMA fast/slow пересеклись вниз — слепая зона роста закончилась")
+alertcondition(sma200Up, "Цена пересекла SMA 200 вверх", "{{ticker}} {{interval}}: цена закрылась выше SMA 200")
+alertcondition(sma200Dn, "Цена пересекла SMA 200 вниз", "{{ticker}} {{interval}}: цена закрылась ниже SMA 200")
+
+if dynAlerts and barstate.isconfirmed
+    if crossUp or crossDn
+        alert(syminfo.ticker + " " + timeframe.period + ": EMA " + str.tostring(fastLen) + "/" + str.tostring(slowLen) +
+             (crossUp ? " пересеклись вверх" : " пересеклись вниз") + ", цена " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
+    if sma200Up or sma200Dn
+        alert(syminfo.ticker + " " + timeframe.period + ": цена пересекла SMA 200 " + (sma200Up ? "вверх" : "вниз") +
+             ", цена " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
