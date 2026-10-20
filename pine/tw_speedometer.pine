@@ -168,3 +168,36 @@ if barstate.islast
 plot(speed, "Сверка: скорость", display = display.data_window)
 plot(accel, "Сверка: ускорение", display = display.data_window)
 plot(phaseId, "Сверка: фаза (1-4)", display = display.data_window)
+
+// ============================================================================
+// 2. Ранние сигналы
+// Смена знака ускорения — ранний признак смены фазы. Смена знака скорости = пересечение
+// EMA fast/slow = конец слепой зоны (от экстремума цены до пересечения линия показывает старый тренд).
+// ============================================================================
+const string G4 = "4. Ранние сигналы"
+bool showAccSig = input.bool(true, "Треугольники смены знака ускорения", group = G4,
+     tooltip = "Треугольник вверх внизу панели — ускорение стало > 0, вниз вверху панели — стало < 0.")
+bool showSpdSig = input.bool(true, "Маркер смены знака скорости (конец слепой зоны)", group = G4,
+     tooltip = "Ромб на нулевой линии с подписью «СЗ»: скорость сменила знак, EMA fast/slow пересеклись — слепая зона закончилась.")
+bool onlyClosed = input.bool(true, "Только после закрытия бара", group = G4,
+     tooltip = "Сигнал на текущей свече появится только после её закрытия (barstate.isconfirmed). На истории все бары закрыты, поэтому история не меняется.")
+
+// ta.* — на глобальном уровне, затем фильтр закрытия бара
+bool accUpRaw = ta.crossover(accel, 0)
+bool accDnRaw = ta.crossunder(accel, 0)
+bool spdUpRaw = ta.crossover(speed, 0)
+bool spdDnRaw = ta.crossunder(speed, 0)
+bool barOk = not onlyClosed or barstate.isconfirmed
+bool accUp = accUpRaw and barOk
+bool accDn = accDnRaw and barOk
+bool spdUp = spdUpRaw and barOk
+bool spdDn = spdDnRaw and barOk
+
+plotshape(showAccSig and accUp, "Ускорение стало > 0", style = shape.triangleup, location = location.bottom,
+     color = C_UP, size = size.tiny)
+plotshape(showAccSig and accDn, "Ускорение стало < 0", style = shape.triangledown, location = location.top,
+     color = C_DN, size = size.tiny)
+plotshape(showSpdSig and spdUp ? 0.0 : na, "Скорость стала > 0 (конец слепой зоны)", style = shape.diamond,
+     location = location.absolute, color = C_UP, size = size.small, text = "СЗ", textcolor = C_UP)
+plotshape(showSpdSig and spdDn ? 0.0 : na, "Скорость стала < 0 (конец слепой зоны)", style = shape.diamond,
+     location = location.absolute, color = C_DN, size = size.small, text = "СЗ", textcolor = C_DN)
