@@ -1,0 +1,143 @@
+//@version=6
+// ============================================================================
+// TW Карта рынка
+// Один индикатор на графике цены для ручного волнового анализа Эллиотта:
+// слепая зона, ZigZag, ручная разметка с проверкой жёстких правил, последний импульс и
+// коррекция A -> B -> C, каналы, Anchored VWAP, профиль объёма, правило 100-140, риск,
+// чек-лист «Зона -> Истощение -> Триггер».
+// Методика: tradewaves.ru, Б. Вильямс, pr0 / RSWA. Скорость и ускорение рисует отдельный
+// индикатор «TW Спидометр»; здесь они считаются внутри только для чек-листа.
+// Это подсказка для анализа, не торговая система и не сигнал к сделке.
+// Механическая версия сетапа на BTC 2022-2026 устойчивого преимущества не показала.
+// Эталон для сверки: reference/map.py
+// ============================================================================
+indicator("TW Карта рынка", shorttitle = "TW Карта", overlay = true, precision = 2,
+     max_lines_count = 500, max_labels_count = 500, max_boxes_count = 500, max_polylines_count = 10)
+
+// ============================================================================
+// 0. Общее: детализация, тема, палитра
+// ============================================================================
+const string G0 = "0. Общее"
+const string DL_MIN = "Минимум"
+const string DL_STD = "Стандарт"
+const string DL_ALL = "Всё"
+const string T_AUTO = "Авто (по фону графика)"
+const string T_LIGHT = "Светлая"
+const string T_DARK = "Тёмная"
+string detailIn = input.string(DL_STD, "Детализация", options = [DL_MIN, DL_STD, DL_ALL], group = G0,
+     tooltip = "Минимум — только линии и ключевые уровни. Стандарт — плюс подписи цен, зоны Фибоначчи, цели 1.0 и 1.618, бары профиля. Всё — плюс информация о ногах, цель 2.618, параллель через 1, подписи всех уровней.")
+string themeIn = input.string(T_AUTO, "Тема", options = [T_AUTO, T_LIGHT, T_DARK], group = G0,
+     tooltip = "«Авто» — по яркости фона графика (chart.bg_color).")
+int lblOffset = input.int(8, "Отступ подписей уровней справа, баров", minval = 1, maxval = 100, group = G0)
+
+int dl = detailIn == DL_MIN ? 0 : detailIn == DL_STD ? 1 : 2
+
+color bgC = chart.bg_color
+bool autoDark = color.r(bgC) * 0.299 + color.g(bgC) * 0.587 + color.b(bgC) * 0.114 < 128
+bool isDark = themeIn == T_AUTO ? autoDark : themeIn == T_DARK
+
+// Палитра Okabe-Ito (различима при дальтонизме); смысл дублируется подписями и таблицами.
+color C_UP = isDark ? #56B4E9 : #0072B2        // рост / бычье / быстрая EMA выше
+color C_DN = isDark ? #E69F00 : #D55E00        // спад / медвежье / быстрая EMA ниже
+color C_OK = #009E73                           // цели, «✓»
+color C_ACC = #CC79A7                          // ZigZag, разметка
+color C_VW = isDark ? #F0E442 : #8C7A00        // VWAP
+color C_TX = isDark ? #D1D4DC : #131722
+color C_MUTED = isDark ? #787B86 : #9598A1
+color C_BG = isDark ? color.new(#1E222D, 5) : color.new(#F0F3FA, 5)
+color C_HD = isDark ? #2A2E39 : #DDE2EC
+
+// ============================================================================
+// M1. Слепая зона и средние
+// ============================================================================
+const string G1 = "1. Слепая зона и средние"
+bool m1On = input.bool(true, "Включить модуль", group = G1)
+int fastLen = input.int(5, "EMA быстрая", minval = 1, group = G1, inline = "e")
+int slowLen = input.int(34, "медленная", minval = 2, group = G1, inline = "e",
+     tooltip = "Те же периоды задают внутреннюю скорость для чек-листа (как в «TW Спидометр»).")
+bool emaLog = input.bool(true, "EMA от логарифма цены", group = G1,
+     tooltip = "EMA считается от ln(close) и переводится обратно в цену (геометрическое среднее), как в спидометре. Выключите для обычных EMA.")
+bool showFill = input.bool(true, "Заливка между EMA", group = G1)
+bool showZones = input.bool(true, "Прямоугольники слепых зон", group = G1,
+     tooltip = "От экстремума режима (EMA быстрая выше/ниже медленной) до пересечения EMA. Рисуется после пересечения.")
+bool showLiveBz = input.bool(true, "Подсветка «внутри живой слепой зоны»", group = G1,
+     tooltip = "Цена ушла от экстремума против режима EMA, а пересечения ещё нет. Если цена обновит экстремум, подсвеченные бары останутся: это возможная слепая зона.")
+bool showSma200 = input.bool(true, "SMA 200", group = G1, inline = "m")
+bool showEma20 = input.bool(false, "EMA 20", group = G1, inline = "m")
+bool showEma50 = input.bool(false, "EMA 50", group = G1, inline = "m")
+int maxZones = input.int(40, "Хранить последних зон", minval = 1, maxval = 150, group = G1)
+if slowLen <= fastLen
+    runtime.error("Медленная EMA должна быть больше быстрой.")
+
+float lsrc = emaLog ? math.log(close) : close
+float emaF = ta.ema(lsrc, fastLen)
+float emaS = ta.ema(lsrc, slowLen)
+float emaFP = emaLog ? math.exp(emaF) : emaF
+float emaSP = emaLog ? math.exp(emaS) : emaS
+float sma200 = ta.sma(close, 200)
+float ema20 = ta.ema(close, 20)
+float ema50 = ta.ema(close, 50)
+
+// Внутренняя скорость и ускорение (не рисуются): те же формулы, что в «TW Спидометр».
+float spSrc = 100.0 * math.log(close)
+float speed = ta.ema(spSrc, fastLen) - ta.ema(spSrc, slowLen)
+float accel = speed - ta.ema(speed, 5)
+
+// Слепая зона: состояние «на ходу» через var, без циклов по истории.
+var int bzReg = 0
+var float bzExt = na
+var int bzExtBar = na
+var float bzOpp = na
+float emaDiff = emaF - emaS
+int bzNew = emaDiff > 0 ? 1 : emaDiff < 0 ? -1 : bzReg
+if bzReg == 1
+    if high > bzExt
+        bzExt := high
+        bzExtBar := bar_index
+        bzOpp := low
+    else
+        bzOpp := math.min(bzOpp, low)
+else if bzReg == -1
+    if low < bzExt
+        bzExt := low
+        bzExtBar := bar_index
+        bzOpp := high
+    else
+        bzOpp := math.max(bzOpp, high)
+
+bool emaCross = false
+int zReg = 0
+int zLeft = na
+float zExt = na
+float zOpp = na
+if bzNew != bzReg and bzNew != 0
+    if bzReg != 0
+        emaCross := true
+        zReg := bzReg
+        zLeft := bzExtBar
+        zExt := bzExt
+        zOpp := bzOpp
+    bzExt := bzNew == 1 ? high : low
+    bzExtBar := bar_index
+    bzOpp := bzNew == 1 ? low : high
+bzReg := bzNew
+
+var array<box> bzBoxes = array.new<box>()
+if m1On and showZones and emaCross
+    color zc = zReg == 1 ? C_UP : C_DN
+    bzBoxes.push(box.new(zLeft, zReg == 1 ? zExt : zOpp, bar_index, zReg == 1 ? zOpp : zExt,
+         border_color = color.new(zc, 50), bgcolor = color.new(zc, 88),
+         text = dl >= 1 ? "слепая зона " + str.tostring(bar_index - zLeft) + " бар." : "слепая зона",
+         text_size = size.tiny, text_color = color.new(C_TX, 30), text_valign = text.align_top, text_halign = text.align_left))
+    if bzBoxes.size() > maxZones
+        bzBoxes.shift().delete()
+
+bool inLiveBz = bzReg != 0 and bar_index > bzExtBar
+bgcolor(m1On and showLiveBz and inLiveBz ? color.new(bzReg == 1 ? C_UP : C_DN, 93) : na, title = "Внутри живой слепой зоны")
+
+pF = plot(m1On ? emaFP : na, "EMA быстрая", color = C_UP, linewidth = 1)
+pS = plot(m1On ? emaSP : na, "EMA медленная", color = C_DN, linewidth = 2)
+fill(pF, pS, color = m1On and showFill ? (emaDiff > 0 ? color.new(C_UP, 85) : color.new(C_DN, 85)) : na, title = "Заливка EMA")
+plot(m1On and showSma200 ? sma200 : na, "SMA 200", color = color.new(C_TX, 25), linewidth = 2)
+plot(m1On and showEma20 ? ema20 : na, "EMA 20", color = color.new(C_OK, 0), linewidth = 1)
+plot(m1On and showEma50 ? ema50 : na, "EMA 50", color = color.new(C_ACC, 0), linewidth = 1)
