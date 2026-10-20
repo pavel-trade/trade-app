@@ -1,0 +1,170 @@
+//@version=6
+// ============================================================================
+// TW Спидометр — скорость + ускорение
+// Проверка волновой разметки Эллиотта по скорости цены (методика tradewaves.ru/teoriya/macd/,
+// идеи Б. Вильямса и pr0 / RSWA). Это инструмент ПРОВЕРКИ разметки, а не торговая система:
+// сигналов «купить/продать» нет.
+//   СКОРОСТЬ  = EMA(5) - EMA(34) от 100 * ln(close) — линейный MACD, значения в %.
+//   УСКОРЕНИЕ = скорость - EMA(скорости, 5) — гистограмма MACD 5/34/5.
+//   Высота столбика = скорость, яркость = ускорение по направлению движения.
+// Эталон для сверки: reference/speedometer.py
+// ============================================================================
+indicator("TW Спидометр — скорость + ускорение", shorttitle = "TW Спидометр", overlay = false, precision = 3,
+     max_lines_count = 300, max_labels_count = 300, max_polylines_count = 5)
+
+// ============================================================================
+// Интерфейс: тема и палитра (объявлены первыми — от них зависят цвета всех модулей)
+// ============================================================================
+const string G0 = "0. Интерфейс"
+const string T_AUTO = "Авто (по фону графика)"
+const string T_LIGHT = "Светлая"
+const string T_DARK = "Тёмная"
+string themeIn = input.string(T_AUTO, "Тема", options = [T_AUTO, T_LIGHT, T_DARK], group = G0,
+     tooltip = "«Авто» определяет тему по яркости фона графика (chart.bg_color). Палитра Okabe-Ito различима при дальтонизме; фаза дополнительно подписана словами в таблице.")
+
+color bgC = chart.bg_color
+bool autoDark = color.r(bgC) * 0.299 + color.g(bgC) * 0.587 + color.b(bgC) * 0.114 < 128
+bool isDark = themeIn == T_AUTO ? autoDark : themeIn == T_DARK
+
+// Okabe-Ito: синий — рост (скорость >= 0), оранжевый — спад (скорость < 0).
+color C_UP = isDark ? #56B4E9 : #0072B2
+color C_DN = isDark ? #E69F00 : #D55E00
+color C_ACC = #CC79A7
+color C_TX = isDark ? #D1D4DC : #131722
+color C_TBL_BG = isDark ? color.new(#1E222D, 5) : color.new(#F0F3FA, 5)
+color C_TBL_HD = isDark ? #2A2E39 : #DDE2EC
+
+// ============================================================================
+// 1. Скорость, ускорение и визуал
+// ============================================================================
+const string G1 = "1. Скорость"
+const string P_W = "Williams 5/34/5"
+const string P_B = "Крупная фигура 13/55/13"
+const string P_C = "Классика 12/26/9"
+const string P_U = "Свои"
+string presetIn = input.string(P_W, "Пресет периодов", options = [P_W, P_B, P_C, P_U], group = G1,
+     tooltip = "Williams 5/34/5 — основной спидометр методики. 13/55/13 — для крупных фигур. 12/26/9 — классический MACD. «Свои» — периоды из полей ниже.")
+int fastIn = input.int(5, "Быстрая EMA («Свои»)", minval = 1, group = G1, inline = "p")
+int slowIn = input.int(34, "медленная", minval = 2, group = G1, inline = "p")
+int sigIn = input.int(5, "EMA ускорения («Свои»)", minval = 1, group = G1,
+     tooltip = "Ускорение = скорость - EMA(скорости, этот период). Поля этой строки и строки выше действуют только при пресете «Свои».")
+bool useLog = input.bool(true, "Скорость от логарифма цены (x100, в %)", group = G1,
+     tooltip = "Включено: источник = 100 * ln(close), скорость — в процентах, пики сравнимы при любом уровне цены. Выключено: скорость в единицах цены.")
+int paleTr = input.int(60, "Прозрачность фазы «замедляется», %", minval = 10, maxval = 90, group = G1,
+     tooltip = "Яркий столбик — скорость ускоряется в сторону движения, бледный — замедляется.")
+
+int fastLen = presetIn == P_W ? 5 : presetIn == P_B ? 13 : presetIn == P_C ? 12 : fastIn
+int slowLen = presetIn == P_W ? 34 : presetIn == P_B ? 55 : presetIn == P_C ? 26 : slowIn
+int sigLen = presetIn == P_W ? 5 : presetIn == P_B ? 13 : presetIn == P_C ? 9 : sigIn
+
+const string G2 = "2. Ускорение"
+const string A_LINE = "Линия поверх (фиксированный множитель)"
+const string A_AUTO = "Авто-масштаб (один раз по истории)"
+const string A_BAND = "Полоса у нуля"
+const string A_OFF = "Не показывать"
+string accModeIn = input.string(A_LINE, "Отображение ускорения", options = [A_LINE, A_AUTO, A_BAND, A_OFF], group = G2,
+     tooltip = "Линия поверх: ускорение x множитель. Авто-масштаб: множитель = P(|скорости|) / P(|ускорения|) за последние N баров, считается один раз на последнем баре и одинаков для всей нарисованной линии. Полоса: квадраты на нуле — цвет = знак ускорения, насыщенность = сила (без масштаба).")
+float accMult = input.float(3.0, "Множитель (линия поверх)", minval = 0.1, maxval = 100.0, step = 0.5, group = G2,
+     tooltip = "Также используется в авто-режиме, пока истории меньше N баров.")
+int autoLen = input.int(500, "Авто-масштаб: окно N баров", minval = 50, maxval = 2000, group = G2,
+     tooltip = "Сколько последних баров учитывать при расчёте множителя и сколько баров рисовать линией в авто-режиме.")
+float autoPct = input.float(95.0, "Авто-масштаб: перцентиль, %", minval = 50.0, maxval = 100.0, step = 1.0, group = G2)
+
+const string G3 = "3. Уровни"
+float lvl = input.float(0.0, "Уровни ±X (0 = выкл.)", minval = 0.0, step = 0.5, group = G3,
+     tooltip = "Горизонтальные уровни +X и -X в единицах скорости (в % при включённом логарифме). Например, 5 — уровни ±5 %.")
+
+// Ядро: [скорость, ускорение]. Все ta.* — безусловно; функция вызывается на глобальном уровне
+// и внутри request.security (модуль 5).
+f_speed(bool lg, int fL, int sL, int gL) =>
+    float src = lg ? 100.0 * math.log(close) : close
+    float spd = ta.ema(src, fL) - ta.ema(src, sL)
+    [spd, spd - ta.ema(spd, gL)]
+
+[speed, accel] = f_speed(useLog, fastLen, slowLen, sigLen)
+
+// Фаза: 1 — рост ускоряется, 2 — рост замедляется, 3 — спад ускоряется, 4 — спад замедляется, 0 — нет данных.
+f_phaseId(float s, float a) =>
+    int id = 0
+    if not na(s) and not na(a)
+        id := s >= 0 ? (a > 0 ? 1 : 2) : (a < 0 ? 3 : 4)
+    id
+
+f_phaseName(int id) =>
+    switch id
+        1 => "рост ускоряется"
+        2 => "рост замедляется"
+        3 => "спад ускоряется"
+        4 => "спад замедляется"
+        => "нет данных"
+
+f_phaseColor(int id) =>
+    switch id
+        1 => C_UP
+        2 => color.new(C_UP, paleTr)
+        3 => C_DN
+        4 => color.new(C_DN, paleTr)
+        => color.gray
+
+int phaseId = f_phaseId(speed, accel)
+string unitTxt = useLog ? " %" : ""
+
+plot(speed, "Скорость", color = f_phaseColor(phaseId), style = plot.style_columns)
+hline(0, "Ноль", color = color.new(color.gray, 30), linestyle = hline.style_solid)
+hline(lvl, "Уровень +X", color = lvl > 0 ? color.new(color.gray, 40) : color.new(color.gray, 100), linestyle = hline.style_dashed)
+hline(-lvl, "Уровень -X", color = lvl > 0 ? color.new(color.gray, 40) : color.new(color.gray, 100), linestyle = hline.style_dashed)
+
+// --- ускорение: линия поверх (фиксированный множитель)
+plot(accModeIn == A_LINE ? accel * accMult : na, "Ускорение x множитель", color = C_ACC, linewidth = 2)
+
+// --- ускорение: авто-масштаб. Перцентили считаются на каждом баре, но множитель берётся
+// ОДИН раз — на последнем баре — и вся линия за N баров перерисовывается с ним (polyline),
+// поэтому масштаб одинаков для всей видимой истории.
+float pSpd = ta.percentile_linear_interpolation(math.abs(speed), autoLen, autoPct)
+float pAcc = ta.percentile_linear_interpolation(math.abs(accel), autoLen, autoPct)
+float accHist = accel
+max_bars_back(accHist, 2000)
+var polyline accPoly = na
+var float autoMult = na
+
+if barstate.islast and accModeIn == A_AUTO
+    autoMult := pAcc > 0 ? pSpd / pAcc : na
+    float mUse = na(autoMult) ? accMult : autoMult
+    int n = math.min(autoLen, bar_index + 1)
+    array<chart.point> pts = array.new<chart.point>()
+    // ограниченный цикл: не больше autoLen (<= 2000) последних баров, max_bars_back задан
+    for i = n - 1 to 0
+        float av = accHist[i]
+        if not na(av)
+            pts.push(chart.point.from_index(bar_index - i, av * mUse))
+    if not na(accPoly)
+        accPoly.delete()
+    accPoly := polyline.new(pts, line_color = C_ACC, line_width = 2)
+
+// --- ускорение: полоса у нуля (знак — цветом и формой, сила — насыщенностью)
+float accStr = pAcc > 0 ? math.min(math.abs(accel) / pAcc, 1.0) : 0.5
+int bandTr = int(math.round(85 - 75 * accStr))
+color bandCol = accel > 0 ? color.new(C_UP, bandTr) : color.new(C_DN, bandTr)
+plotshape(accModeIn == A_BAND and accel > 0 ? 0.0 : na, "Ускорение > 0 (полоса)", style = shape.triangleup,
+     location = location.absolute, color = bandCol, size = size.tiny)
+plotshape(accModeIn == A_BAND and accel <= 0 ? 0.0 : na, "Ускорение <= 0 (полоса)", style = shape.triangledown,
+     location = location.absolute, color = bandCol, size = size.tiny)
+
+// --- подпись у правого края: «ускорение xN»
+var label accLbl = na
+if barstate.islast
+    float mShow = accModeIn == A_AUTO ? (na(autoMult) ? accMult : autoMult) : accMult
+    string lblTxt = accModeIn == A_LINE ? "ускорение x" + str.tostring(accMult, "0.0#") :
+         accModeIn == A_AUTO ? "ускорение x" + str.tostring(mShow, "0.0#") + (na(autoMult) ? " (мало истории)" : " (авто)") :
+         accModeIn == A_BAND ? "ускорение: полоса" : ""
+    float lblY = accModeIn == A_BAND ? 0.0 : nz(accel) * mShow
+    if na(accLbl)
+        accLbl := label.new(bar_index, 0.0, "", style = label.style_label_left, color = color.new(color.white, 100), size = size.small)
+    label.set_xy(accLbl, bar_index + 2, lblY)
+    label.set_text(accLbl, lblTxt)
+    label.set_textcolor(accLbl, C_ACC)
+
+// Значения для сверки с reference/speedometer.py (окно данных; на панели не рисуются).
+plot(speed, "Сверка: скорость", display = display.data_window)
+plot(accel, "Сверка: ускорение", display = display.data_window)
+plot(phaseId, "Сверка: фаза (1-4)", display = display.data_window)
