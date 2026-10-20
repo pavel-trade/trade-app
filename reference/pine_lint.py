@@ -125,6 +125,11 @@ def lint(path: str) -> list[str]:
                 elif re.search(r"\?|\band\b|\bor\b", before):
                     err(n, f"вызов {m.group(0).strip()} после ?, and или or")
 
+    # 3б. функции объявляются только на верхнем уровне
+    for n, l in enumerate(code):
+        if re.match(r"^\s+\w+\s*\([^)]*\)\s*=>", l):
+            err(n, "объявление функции не на верхнем уровне")
+
     # 4. request.security
     sec = [n for n, l in enumerate(code) if "request.security(" in l]
     if len(sec) > 3:

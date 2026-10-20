@@ -67,3 +67,7 @@ def test_polyline_needs_limit(tmp_path):
     p = tmp_path / "p.pine"
     p.write_text('//@version=6\nindicator("x")\nvar polyline pl = na\nif barstate.islast\n    pl := polyline.new(array.new<chart.point>())\n', encoding="utf-8")
     assert pine_lint.lint(str(p))
+
+
+def test_nested_function_definition(tmp_path):
+    assert lint_text(tmp_path, "if barstate.islast\n    f(x) =>\n        x + 1\n")

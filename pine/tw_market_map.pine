@@ -647,3 +647,275 @@ if barstate.islast and m3On
             ln.set_color(color.new(wCol, 100))
         for lb in wLabels
             lb.set_text("")
+
+// ============================================================================
+// M4. Последний импульс и коррекция A -> B -> C
+// Авто по ZigZag: если последняя нога откатила меньше 100 % предыдущей — A, B, C = три
+// последних свинга (коррекция завершена). Иначе A, B = два последних свинга, C — текущий
+// экстремум коррекции (не подтверждён). Направление — по B относительно A.
+// ============================================================================
+const string G4 = "4. Последний импульс и коррекция A-B-C"
+const string S_AUTO = "Авто по ZigZag"
+const string S_MAN = "Вручную по датам"
+bool m4On = input.bool(true, "Показывать уровни A-B-C", group = G4)
+string abcSrc = input.string(S_AUTO, "Источник A, B, C", options = [S_AUTO, S_MAN], group = G4,
+     tooltip = "Авто — по свингам модуля 2. Вручную — по датам ниже (цена — экстремум бара по направлению).")
+int tA = input.time(0, "A — начало волны 1", confirm = false, group = G4)
+int tB = input.time(0, "B — конец волны 1", confirm = false, group = G4)
+int tC = input.time(0, "C — конец коррекции", confirm = false, group = G4)
+bool fibLog = input.bool(true, "Зоны и цели в лог-шкале", group = G4,
+     tooltip = "Откат и расширение считаются по логарифму цены (сравнимо на любом уровне цены). Выключите для линейных.")
+bool showFibZones = input.bool(true, "Зоны коррекции 38.2 / 50 / 61.8 / 78.6 %", group = G4)
+bool showTargets = input.bool(true, "Цели волны 3: 1.0 / 1.618 / 2.618 x (B - A) от C", group = G4)
+bool linTargets = input.bool(false, "Дополнительно линейные цели", group = G4)
+
+f_fw(float x) =>
+    fibLog ? math.log(x) : x
+
+f_iv(float y) =>
+    fibLog ? math.exp(y) : y
+
+f_ret(float a, float b, float c) =>
+    float fa = f_fw(a)
+    float fb = f_fw(b)
+    fb == fa ? na : (fb - f_fw(c)) / (fb - fa)
+
+var array<TPt> abcPts = f_newPts(array.from(tA, tB, tC))
+f_detect(abcPts)
+TPt mA = abcPts.get(0)
+TPt mB = abcPts.get(1)
+TPt mC = abcPts.get(2)
+
+// ручные ноги (A; B] и (B; C]
+var float mABmx = na
+var float mABmn = na
+var float mABvol = 0.0
+var int mABn = 0
+var float mBCmx = na
+var float mBCmn = na
+var float mBCvol = 0.0
+var int mBCn = 0
+if mA.done and bar_index > mA.bar and (not mB.done or mB.bar == bar_index)
+    mABmx := f_mx(mABmx, speed)
+    mABmn := f_mn(mABmn, speed)
+    mABvol += volZ
+    mABn += 1
+if mB.done and bar_index > mB.bar and (not mC.done or mC.bar == bar_index)
+    mBCmx := f_mx(mBCmx, speed)
+    mBCmn := f_mn(mBCmn, speed)
+    mBCvol += volZ
+    mBCn += 1
+
+// --- структура на текущем баре
+int sCand = 0           // 0 — нет, 1 — C текущий (не подтверждён), 2 — C подтверждён
+int aBar = na
+float aPx = na
+float aPV0 = na
+float aV0 = na
+int bBar = na
+float bPx = na
+int cBar = na
+float cPx = na
+float cSpd = na
+float cPV0 = na
+float cV0 = na
+float abMx = na
+float abMn = na
+float abVol = na
+int abN = 0
+float bcMx = na
+float bcMn = na
+float bcVol = na
+int bcN = 0
+int nSw = swBar.size()
+if abcSrc == S_AUTO
+    if nSw >= 3
+        float r3 = f_ret(swPx.get(nSw - 3), swPx.get(nSw - 2), swPx.get(nSw - 1))
+        if not na(r3) and r3 > 0 and r3 < 1
+            sCand := 2
+            aBar := swBar.get(nSw - 3)
+            aPx := swPx.get(nSw - 3)
+            aPV0 := swPV0.get(nSw - 3)
+            aV0 := swV0.get(nSw - 3)
+            bBar := swBar.get(nSw - 2)
+            bPx := swPx.get(nSw - 2)
+            cBar := swBar.get(nSw - 1)
+            cPx := swPx.get(nSw - 1)
+            cSpd := swSpd.get(nSw - 1)
+            cPV0 := swPV0.get(nSw - 1)
+            cV0 := swV0.get(nSw - 1)
+            abMx := lgMx.get(nSw - 2)
+            abMn := lgMn.get(nSw - 2)
+            abVol := lgVol.get(nSw - 2)
+            abN := lgN.get(nSw - 2)
+            bcMx := lgMx.get(nSw - 1)
+            bcMn := lgMn.get(nSw - 1)
+            bcVol := lgVol.get(nSw - 1)
+            bcN := lgN.get(nSw - 1)
+    if sCand == 0 and nSw >= 2 and hasRun
+        sCand := 1
+        aBar := swBar.get(nSw - 2)
+        aPx := swPx.get(nSw - 2)
+        aPV0 := swPV0.get(nSw - 2)
+        aV0 := swV0.get(nSw - 2)
+        bBar := swBar.get(nSw - 1)
+        bPx := swPx.get(nSw - 1)
+        cBar := rnBar
+        cPx := rnPx
+        cSpd := rnSpd
+        cPV0 := rnPV0
+        cV0 := rnV0
+        abMx := lgMx.get(nSw - 1)
+        abMn := lgMn.get(nSw - 1)
+        abVol := lgVol.get(nSw - 1)
+        abN := lgN.get(nSw - 1)
+        bcMx := rlMx
+        bcMn := rlMn
+        bcVol := rlVol
+        bcN := rlN
+else if mA.done and mB.done and mC.done and mA.bar < mB.bar and mB.bar < mC.bar
+    int dm = mB.cl > mA.cl ? 1 : -1
+    sCand := 2
+    aBar := mA.bar
+    aPx := dm == 1 ? mA.lo : mA.hi
+    aPV0 := mA.pv0
+    aV0 := mA.v0
+    bBar := mB.bar
+    bPx := dm == 1 ? mB.hi : mB.lo
+    cBar := mC.bar
+    cPx := dm == 1 ? mC.lo : mC.hi
+    cSpd := mC.sp
+    cPV0 := mC.pv0
+    cV0 := mC.v0
+    abMx := mABmx
+    abMn := mABmn
+    abVol := mABvol
+    abN := mABn
+    bcMx := mBCmx
+    bcMn := mBCmn
+    bcVol := mBCvol
+    bcN := mBCn
+
+bool hasStruct = sCand > 0
+int dS = hasStruct ? (bPx > aPx ? 1 : -1) : 0
+float retr = hasStruct ? f_ret(aPx, bPx, cPx) : na
+
+// «первый триггер»: последний малый экстремум внутри коррекции (между B и C), против коррекции
+float trigPx = na
+int trigBar = na
+if hasStruct
+    int nm = dS == 1 ? mhBar.size() : mlBar.size()
+    if nm > 0
+        for i = nm - 1 to 0
+            int mb = dS == 1 ? mhBar.get(i) : mlBar.get(i)
+            if mb < cBar and mb > bBar
+                trigBar := mb
+                trigPx := dS == 1 ? mhPx.get(i) : mlPx.get(i)
+                break
+
+f_fib(float r) =>
+    f_iv(f_fw(bPx) - r * (f_fw(bPx) - f_fw(aPx)))
+
+f_tgt(float k, bool lg) =>
+    lg ? math.exp(math.log(cPx) + k * (math.log(bPx) - math.log(aPx))) : cPx + k * (bPx - aPx)
+
+float tg1 = hasStruct ? f_tgt(1.0, fibLog) : na
+float tg2 = hasStruct ? f_tgt(1.618, fibLog) : na
+float tg3 = hasStruct ? f_tgt(2.618, fibLog) : na
+
+// --- отрисовка уровней: постоянный пул линий, подписей и полос; на последнем баре — только set_*
+float atrGap = ta.atr(14)
+const int LV_N = 16
+var array<line> lvLines = array.new<line>()
+var array<label> lvLabels = array.new<label>()
+var array<box> fibBoxes = array.new<box>()
+
+type TLv
+    float y
+    string t
+    color c
+    int x
+    string st
+
+f_lv(array<TLv> a, float y, string t, color c, int x, string st) =>
+    a.push(TLv.new(y, t + "  " + str.tostring(y, format.mintick), c, x, st))
+
+// раздвигает подписи по вертикали: сортировка по цене, минимальный зазор gap
+f_spread(array<float> ys, float gap) =>
+    array<float> out = array.copy(ys)
+    array<int> idx = array.sort_indices(ys, order.ascending)
+    float prev = na
+    for k in idx
+        float y = ys.get(k)
+        if not na(y)
+            float yy = na(prev) ? y : math.max(y, prev + gap)
+            out.set(k, yy)
+            prev := yy
+    out
+
+if barstate.islast
+    if lvLines.size() == 0
+        for i = 0 to LV_N - 1
+            lvLines.push(line.new(na, na, na, na, width = 1))
+            lvLabels.push(label.new(na, na, "", style = label.style_label_left, size = size.small))
+        for i = 0 to 2
+            fibBoxes.push(box.new(na, na, na, na, border_color = color.new(C_UP, 100)))
+    array<TLv> lv = array.new<TLv>()
+    bool draw = m4On and hasStruct
+    if draw
+        f_lv(lv, aPx, "отмена: начало волны 1 (A)", C_DN, aBar, line.style_solid)
+        f_lv(lv, bPx, "конец волны 1 (B)", C_MUTED, bBar, line.style_dotted)
+        f_lv(lv, cPx, sCand == 1 ? "стоп идеи (C, не подтверждён)" : "стоп идеи (C)", C_DN, cBar, line.style_dashed)
+        if not na(trigPx)
+            f_lv(lv, trigPx, "первый триггер", C_UP, trigBar, line.style_dashed)
+        if showFibZones and dl >= 1
+            for r in array.from(0.382, 0.5, 0.618, 0.786)
+                f_lv(lv, f_fib(r), str.tostring(r * 100, "0.0") + " %", C_MUTED, bBar, line.style_dotted)
+        if showTargets
+            f_lv(lv, tg1, "цель 1.0", C_OK, cBar, line.style_solid)
+            if dl >= 1
+                f_lv(lv, tg2, "цель 1.618", C_OK, cBar, line.style_solid)
+            if dl >= 2
+                f_lv(lv, tg3, "цель 2.618", C_OK, cBar, line.style_solid)
+            if linTargets
+                f_lv(lv, f_tgt(1.0, false), "цель 1.0 (лин.)", C_OK, cBar, line.style_dotted)
+                if dl >= 1
+                    f_lv(lv, f_tgt(1.618, false), "цель 1.618 (лин.)", C_OK, cBar, line.style_dotted)
+    array<float> lvY = array.new<float>()
+    for v in lv
+        lvY.push(v.y)
+    array<float> ly = f_spread(lvY, nz(atrGap) * 0.7)
+    int xR = bar_index + lblOffset
+    for i = 0 to LV_N - 1
+        line ln = lvLines.get(i)
+        label lb = lvLabels.get(i)
+        if i < lv.size()
+            TLv v = lv.get(i)
+            ln.set_xy1(v.x, v.y)
+            ln.set_xy2(xR, v.y)
+            ln.set_color(v.c)
+            ln.set_style(v.st)
+            lb.set_xy(xR, ly.get(i))
+            lb.set_text(v.t)
+            lb.set_textcolor(v.c)
+            lb.set_color(color.new(C_BG, 15))
+        else
+            ln.set_color(color.new(C_MUTED, 100))
+            lb.set_text("")
+            lb.set_color(color.new(C_BG, 100))
+    // полосы коррекции; ключевая 50-61.8 % — насыщеннее
+    for i = 0 to 2
+        box bx = fibBoxes.get(i)
+        if draw and showFibZones
+            float r1 = array.from(0.382, 0.5, 0.618).get(i)
+            float r2 = array.from(0.5, 0.618, 0.786).get(i)
+            bx.set_lefttop(bBar, math.max(f_fib(r1), f_fib(r2)))
+            bx.set_rightbottom(xR, math.min(f_fib(r1), f_fib(r2)))
+            bx.set_bgcolor(color.new(dS == 1 ? C_UP : C_DN, i == 1 ? 80 : 93))
+            bx.set_text(i == 1 and dl >= 1 ? "ключевая зона 50-61.8 %" : "")
+            bx.set_text_size(size.tiny)
+            bx.set_text_color(C_MUTED)
+            bx.set_text_halign(text.align_left)
+        else
+            bx.set_bgcolor(color.new(C_UP, 100))
+            bx.set_text("")
