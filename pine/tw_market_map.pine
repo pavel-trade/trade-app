@@ -1155,3 +1155,295 @@ if barstate.islast
                 lb.set_text(nm.get(i) + " " + str.tostring(ys.get(i), format.mintick))
                 lb.set_textcolor(C_ACC)
                 lb.set_color(color.new(C_BG, 30))
+
+// ============================================================================
+// M8. Правило 100-140 баров
+// ============================================================================
+const string G8 = "8. Правило 100-140 баров"
+const string R_AUTO = "Авто: нога A-B"
+const string R_MAN = "Вручную по датам"
+bool m8On = input.bool(true, "Включить", group = G8,
+     tooltip = "Изучаемая волна должна занимать 100-140 баров текущего ТФ. Меньше — спидометр покажет волну старшей степени, больше — разобьёт её на младшие.")
+string rSrc = input.string(R_AUTO, "Волна", options = [R_AUTO, R_MAN], group = G8)
+int rT1 = input.time(0, "Начало (вручную)", confirm = false, group = G8)
+int rT2 = input.time(0, "Конец (вручную)", confirm = false, group = G8)
+
+var array<TPt> rPts = f_newPts(array.from(rT1, rT2))
+f_detect(rPts)
+
+f_tfText(float sec) =>
+    sec < 3600 ? str.tostring(sec / 60, "0") + " мин" : sec < 86400 ? str.tostring(sec / 3600, "0.0") + " ч" : str.tostring(sec / 86400, "0.0") + " д"
+
+int rStart = rSrc == R_MAN ? (rPts.get(0).done ? rPts.get(0).bar : na) : (hasStruct ? aBar : na)
+int rEnd = rSrc == R_MAN ? (rPts.get(1).done ? rPts.get(1).bar : na) : (hasStruct ? bBar : na)
+int rN = na(rStart) or na(rEnd) ? na : rEnd - rStart
+string rStatus = na(rN) ? "—" : rN < 100 ? "мало" : rN > 140 ? "много" : "норма"
+string rTf = na(rN) ? "" : f_tfText(timeframe.in_seconds() * rN / 120.0)
+
+var line rLine = na
+var label rLbl = na
+if barstate.islast
+    if na(rLine)
+        rLine := line.new(na, na, na, na, extend = extend.both, style = line.style_dotted, width = 1)
+        rLbl := label.new(na, na, "", style = label.style_label_down, size = size.tiny)
+    if m8On and not na(rStart)
+        rLine.set_xy1(rStart, low)
+        rLine.set_xy2(rStart, high)
+        rLine.set_color(color.new(C_MUTED, 30))
+        rLbl.set_xy(rStart, high)
+        rLbl.set_text(dl >= 1 ? "начало волны: " + str.tostring(rN) + " бар. (" + rStatus + ")" : "")
+        rLbl.set_textcolor(C_MUTED)
+        rLbl.set_color(color.new(C_BG, 30))
+    else
+        rLine.set_color(color.new(C_MUTED, 100))
+        rLbl.set_text("")
+
+// ============================================================================
+// M9. Риск и размер позиции (ATR). Только расчёт, не рекомендация.
+// ============================================================================
+const string G9 = "9. Риск и размер позиции"
+int atrLen = input.int(14, "ATR", minval = 1, group = G9, inline = "a")
+float atrMult = input.float(0.5, "стоп = C -/+ ATR x", minval = 0.0, maxval = 5.0, step = 0.1, group = G9, inline = "a")
+float deposit = input.float(10000.0, "Депозит", minval = 0.0, group = G9, inline = "d")
+float riskPct = input.float(1.0, "риск на сделку, %", minval = 0.01, maxval = 100.0, step = 0.1, group = G9, inline = "d")
+
+float atrV = ta.atr(atrLen)
+float stopPx = hasStruct and not na(atrV) ? cPx - dS * atrV * atrMult : na
+float riskUnit = math.abs(close - stopPx)
+float riskMoney = deposit * riskPct / 100.0
+float posQty = riskUnit > 0 ? riskMoney / riskUnit : na
+f_rr(float t) =>
+    na(stopPx) or close == stopPx ? na : (t - close) / (close - stopPx)
+
+// ============================================================================
+// M10. Чек-лист «Зона -> Истощение -> Триггер»
+// Пункты: 1 ✓, 0 ✗, -1 — (нет данных). Скорость считается внутри и не рисуется.
+// ============================================================================
+const string G10 = "10. Чек-лист сетапа"
+bool m10On = input.bool(true, "Включить чек-лист", group = G10)
+float zoneLo = input.float(38.2, "Зона коррекции: от, %", minval = 0.0, maxval = 100.0, step = 0.1, group = G10, inline = "z")
+float zoneHi = input.float(78.6, "до, %", minval = 0.0, maxval = 100.0, step = 0.1, group = G10, inline = "z")
+float kSlow = input.float(0.7, "K: |скорость B-C| < K x пик A-B", minval = 0.1, maxval = 2.0, step = 0.05, group = G10)
+float convMargin = input.float(10.0, "Конвергенция: скорость на C слабее экстремума, %", minval = 0.0, maxval = 90.0, step = 1.0, group = G10,
+     tooltip = "Цена дошла до нового экстремума C, а экстремум скорости коррекции остался раньше: на C скорость слабее его хотя бы на этот процент.")
+bool showTrigLbl = input.bool(true, "Метка при переходе в «Триггер» (только на закрытом баре)", group = G10)
+
+var int lastSpdCross = -1
+bool spdCrossUp = ta.crossover(speed, 0)
+bool spdCrossDn = ta.crossunder(speed, 0)
+if spdCrossUp or spdCrossDn
+    lastSpdCross := bar_index
+
+array<int> it = array.new<int>(9, -1)
+if hasStruct
+    it.set(0, not na(retr) and retr >= zoneLo / 100 and retr <= zoneHi / 100 and retr < 1 ? 1 : 0)
+    float imp = dS == 1 ? abMx : -abMn
+    float cor = dS == 1 ? -bcMn : bcMx
+    if not na(imp) and not na(cor)
+        it.set(1, imp > 0 and math.max(cor, 0.0) < kSlow * imp ? 1 : 0)
+    float ext = dS == 1 ? bcMn : bcMx
+    if not na(ext) and not na(cSpd) and dS * ext < 0
+        it.set(2, dS * cSpd > dS * ext + convMargin / 100 * math.abs(ext) ? 1 : 0)
+    if hasVol and abN > 0 and bcN > 0
+        it.set(3, bcVol / bcN < abVol / abN ? 1 : 0)
+    if not na(trigPx)
+        it.set(4, bar_index > cBar and dS * (close - trigPx) > 0 ? 1 : 0)
+    if not na(accel)
+        it.set(5, dS * accel > 0 ? 1 : 0)
+    if not na(speed)
+        it.set(6, dS * speed > 0 and lastSpdCross > cBar ? 1 : 0)
+    if not na(vwC)
+        it.set(7, dS * (close - vwC) > 0 ? 1 : 0)
+    if not na(sma200)
+        it.set(8, dS * (close - sma200) > 0 ? 1 : 0)
+
+bool zoneOk = it.get(0) == 1 and it.get(1) == 1
+bool exhOk = zoneOk and it.get(2) == 1 and it.get(3) != 0
+bool trgOk = exhOk and it.get(4) == 1
+int status = trgOk ? 3 : exhOk ? 2 : zoneOk ? 1 : 0
+string reason = hasStruct ? "" : "нет структуры A-B-C"
+if sCand == 1 and not na(retr) and retr >= 1
+    status := 0
+    reason := "коррекция ушла за A — отмена"
+else if sCand == 2 and dS * (close - cPx) < 0
+    status := 0
+    reason := "цена за C — стоп идеи"
+if not m10On
+    status := 0
+int score = 0
+for i = 0 to 7
+    if it.get(i) == 1
+        score += 1
+
+string STATUS_TXT = status == 3 ? "Триггер" : status == 2 ? "Истощение" : status == 1 ? "Зона" : "Нет сетапа"
+bool toZone = status == 1 and status[1] != 1
+bool toExh = status == 2 and status[1] != 2
+bool toTrig = status == 3 and status[1] < 3
+
+var array<label> trigLabels = array.new<label>()
+if m10On and showTrigLbl and toTrig and barstate.isconfirmed
+    trigLabels.push(label.new(bar_index, dS == 1 ? low : high, "Триггер\nподсказка, не сигнал",
+         style = dS == 1 ? label.style_label_up : label.style_label_down, color = color.new(dS == 1 ? C_UP : C_DN, 10),
+         textcolor = color.white, size = size.small))
+    if trigLabels.size() > 50
+        trigLabels.shift().delete()
+
+// значения для сверки с reference/map.py (окно данных)
+plot(speed, "Сверка: скорость", display = display.data_window)
+plot(accel, "Сверка: ускорение", display = display.data_window)
+plot(status, "Сверка: статус (0-3)", display = display.data_window)
+plot(score, "Сверка: счёт", display = display.data_window)
+plot(retr, "Сверка: откат C", display = display.data_window)
+
+// ============================================================================
+// Таблицы
+// ============================================================================
+const string G12 = "12. Таблицы"
+const string POS_TL = "Вверху слева"
+const string POS_TR = "Вверху справа"
+const string POS_BL = "Внизу слева"
+const string POS_BR = "Внизу справа"
+const string POS_MR = "Посередине справа"
+const string SZ_S = "Мелкий"
+const string SZ_M = "Средний"
+const string SZ_L = "Крупный"
+bool showChk = input.bool(true, "Таблица чек-листа, риска и 100-140", group = G12, inline = "t1")
+string chkPosIn = input.string(POS_TR, "", options = [POS_TL, POS_TR, POS_MR, POS_BL, POS_BR], group = G12, inline = "t1")
+bool showWaveT = input.bool(true, "Таблица разметки волн", group = G12, inline = "t2")
+string wavePosIn = input.string(POS_BR, "", options = [POS_TL, POS_TR, POS_MR, POS_BL, POS_BR], group = G12, inline = "t2")
+string tblSizeIn = input.string(SZ_S, "Размер текста", options = [SZ_S, SZ_M, SZ_L], group = G12)
+
+f_pos(string p) =>
+    switch p
+        POS_TL => position.top_left
+        POS_TR => position.top_right
+        POS_MR => position.middle_right
+        POS_BL => position.bottom_left
+        => position.bottom_right
+
+string tSz = tblSizeIn == SZ_S ? size.tiny : tblSizeIn == SZ_M ? size.small : size.normal
+
+f_glyph(int s) =>
+    s == 1 ? "✓" : s == 0 ? "✗" : "—"
+
+f_gcol(int s) =>
+    s == 1 ? C_OK : s == 0 ? C_DN : C_MUTED
+
+var table chkT = table.new(f_pos(chkPosIn), 3, 21, border_width = 1)
+var table waveT = table.new(f_pos(wavePosIn), 3, 16, border_width = 1)
+
+f_c(table t, int c, int r, string txt, color tc, color bg) =>
+    table.cell(t, c, r, txt, text_color = tc, bgcolor = bg, text_size = tSz, text_halign = text.align_left)
+
+f_item(int r, string name, int k, string note) =>
+    int s = it.get(k)
+    f_c(chkT, 0, r, name, C_TX, C_BG)
+    f_c(chkT, 1, r, f_glyph(s), f_gcol(s), C_BG)
+    f_c(chkT, 2, r, note, C_MUTED, C_BG)
+
+f_num(float v, string fmt) =>
+    na(v) ? "—" : str.tostring(v, fmt)
+
+if barstate.islast
+    table.clear(chkT, 0, 0, 2, 20)
+    table.clear(waveT, 0, 0, 2, 15)
+    if showChk
+        color stc = status == 3 ? C_OK : status >= 1 ? C_UP : C_MUTED
+        f_c(chkT, 0, 0, "Зона → Истощение → Триггер", C_TX, C_HD)
+        f_c(chkT, 1, 0, STATUS_TXT, stc, C_HD)
+        f_c(chkT, 2, 0, reason != "" ? reason : "счёт " + str.tostring(score) + " из 8", reason != "" ? C_DN : C_TX, C_HD)
+        string sDesc = hasStruct ? "A-B-C " + (dS == 1 ? "вверх" : "вниз") + ", откат " + f_num(retr * 100, "0.0") + " %" : "—"
+        f_c(chkT, 0, 1, "Структура", C_TX, C_BG)
+        f_c(chkT, 1, 1, sDesc, C_TX, C_BG)
+        f_c(chkT, 2, 1, sCand == 1 ? "C не подтверждён — может измениться" : sCand == 2 ? (abcSrc == S_MAN ? "вручную" : "C подтверждён") : "", C_MUTED, C_BG)
+        f_c(chkT, 0, 2, "ЗОНА", C_MUTED, C_HD)
+        f_c(chkT, 1, 2, "", C_MUTED, C_HD)
+        f_c(chkT, 2, 2, "", C_MUTED, C_HD)
+        float impV = hasStruct ? (dS == 1 ? abMx : -abMn) : na
+        float corV = hasStruct ? (dS == 1 ? -bcMn : bcMx) : na
+        f_item(3, "1. Откат " + str.tostring(zoneLo, "0.0") + "-" + str.tostring(zoneHi, "0.0") + " %, не за A", 0, f_num(retr * 100, "0.0") + " %")
+        f_item(4, "2. Коррекция медленнее импульса", 1, impV > 0 ? "|B-C| = " + f_num(math.max(corV, 0) / impV, "0.00") + " от пика A-B (K " + str.tostring(kSlow, "0.00") + ")" : "—")
+        f_c(chkT, 0, 5, "ИСТОЩЕНИЕ", C_MUTED, C_HD)
+        f_c(chkT, 1, 5, "", C_MUTED, C_HD)
+        f_c(chkT, 2, 5, "", C_MUTED, C_HD)
+        f_item(6, "3. Конвергенция на экстремуме C", 2, "скорость на C " + f_num(cSpd, "0.00") + " / экстремум " + f_num(dS == 1 ? bcMn : bcMx, "0.00"))
+        f_item(7, "4. Объём коррекции ниже импульса", 3, not hasVol ? "объём недоступен" : abN > 0 and bcN > 0 ? f_num((bcVol / bcN) / (abVol / abN), "0.00") + " от импульса" : "—")
+        f_c(chkT, 0, 8, "ТРИГГЕР", C_MUTED, C_HD)
+        f_c(chkT, 1, 8, "", C_MUTED, C_HD)
+        f_c(chkT, 2, 8, "", C_MUTED, C_HD)
+        f_item(9, "5. Слом структуры (закрытие за триггером)", 4, f_num(trigPx, format.mintick))
+        f_item(10, "6. Ускорение по направлению", 5, f_num(accel, "0.000"))
+        f_item(11, "7. Конец слепой зоны по направлению", 6, "скорость " + f_num(speed, "0.00"))
+        f_item(12, "8. Цена за AVWAP от C", 7, not hasVol ? "объём недоступен" : f_num(vwC, format.mintick))
+        f_c(chkT, 0, 13, "ФИЛЬТР (не блокирует)", C_MUTED, C_HD)
+        f_c(chkT, 1, 13, "", C_MUTED, C_HD)
+        f_c(chkT, 2, 13, "", C_MUTED, C_HD)
+        f_item(14, "9. Режим: SMA 200", 8, f_num(sma200, format.mintick))
+        f_c(chkT, 0, 15, "Риск (стоп = C -/+ ATR x " + str.tostring(atrMult, "0.0#") + ")", C_TX, C_BG)
+        f_c(chkT, 1, 15, "стоп " + f_num(stopPx, format.mintick), C_DN, C_BG)
+        f_c(chkT, 2, 15, "размер " + f_num(posQty, "#.####") + ", риск " + str.tostring(riskMoney, "#,##0.##"), C_TX, C_BG)
+        f_c(chkT, 0, 16, "Прибыль/риск до целей", C_TX, C_BG)
+        f_c(chkT, 1, 16, "1.0: " + f_num(f_rr(tg1), "0.0"), C_OK, C_BG)
+        f_c(chkT, 2, 16, "1.618: " + f_num(f_rr(tg2), "0.0") + " / 2.618: " + f_num(f_rr(tg3), "0.0"), C_OK, C_BG)
+        f_c(chkT, 0, 17, "Правило 100-140", C_TX, C_BG)
+        f_c(chkT, 1, 17, m8On and not na(rN) ? str.tostring(rN) + " бар. — " + rStatus : "—", rStatus == "норма" ? C_OK : C_DN, C_BG)
+        f_c(chkT, 2, 17, m8On and not na(rN) ? "ТФ ≈ " + rTf : "", C_MUTED, C_BG)
+        f_c(chkT, 0, 18, "Профиль объёма / AVWAP", C_TX, C_BG)
+        f_c(chkT, 1, 18, not hasVol ? "объём недоступен" : "POC " + f_num(vpPoc, format.mintick), C_TX, C_BG)
+        f_c(chkT, 2, 18, not hasVol ? "M6 и M7 отключены" : vpNote, C_MUTED, C_BG)
+        f_c(chkT, 0, 19, "Подсказка для анализа, не сигнал к сделке.", C_MUTED, C_BG)
+    if showWaveT and m3On and wN >= 2
+        f_c(waveT, 0, 0, "Разметка: " + wKind, C_TX, C_HD)
+        f_c(waveT, 1, 0, wD == 1 ? "вверх" : "вниз", C_TX, C_HD)
+        f_c(waveT, 2, 0, str.tostring(wN) + " точ.", C_TX, C_HD)
+        int r = 1
+        int nr = math.min(rName.size(), 10)
+        for i = 0 to nr - 1
+            if nr > 0
+                f_c(waveT, 0, r, rName.get(i), C_TX, C_BG)
+                f_c(waveT, 1, r, f_glyph(rState.get(i)), f_gcol(rState.get(i)), C_BG)
+                f_c(waveT, 2, r, rNote.get(i), C_MUTED, C_BG)
+                r += 1
+        if ratTxt.size() > 0
+            f_c(waveT, 0, r, "Соотношения (лог)", C_TX, C_BG)
+            f_c(waveT, 1, r, ratTxt.join(", "), C_TX, C_BG)
+            f_c(waveT, 2, r, "сверка с нормами", C_MUTED, C_BG)
+            r += 1
+        f_c(waveT, 0, r, "Проверка жёстких правил, не разметка.", C_MUTED, C_BG)
+
+// ============================================================================
+// M11. Оповещения
+// alertcondition — для меню «Создать оповещение» (частота «Раз за закрытие бара»).
+// alert() — динамический текст, только на закрытом баре (barstate.isconfirmed).
+// ============================================================================
+const string G11 = "11. Оповещения"
+bool dynAlerts = input.bool(true, "Динамические оповещения alert()", group = G11,
+     tooltip = "Создайте оповещение с условием «Любой вызов функции alert()». В тексте — символ, ТФ, статус, счёт и уровни. Только на закрытом баре.")
+
+bool beyondA = hasStruct and dS * (close - aPx) < 0
+bool breakA = beyondA and not beyondA[1]
+bool trigHit = it.get(4) == 1
+bool breakTrig = trigHit and not trigHit[1]
+
+alertcondition(toZone, "Статус: Зона", "{{ticker}} {{interval}}: статус «Зона» (подсказка, не сигнал)")
+alertcondition(toExh, "Статус: Истощение", "{{ticker}} {{interval}}: статус «Истощение» (подсказка, не сигнал)")
+alertcondition(toTrig, "Статус: Триггер", "{{ticker}} {{interval}}: статус «Триггер» (подсказка, не сигнал)")
+alertcondition(emaCross, "Пересечение EMA 5/34", "{{ticker}} {{interval}}: EMA 5/34 пересеклись — слепая зона закончилась")
+alertcondition(breakA, "Пробой уровня отмены A", "{{ticker}} {{interval}}: цена закрылась за началом волны 1 (A)")
+alertcondition(breakTrig, "Пробой первого триггера", "{{ticker}} {{interval}}: закрытие за первым триггером")
+alertcondition(newSwing, "Новый свинг", "{{ticker}} {{interval}}: подтверждён новый свинг ZigZag")
+
+f_alertMsg(string what) =>
+    syminfo.ticker + " " + timeframe.period + ": " + what + ". Статус: " + STATUS_TXT + ", счёт " + str.tostring(score) + " из 8" +
+         (hasStruct ? ". A " + str.tostring(aPx, format.mintick) + ", B " + str.tostring(bPx, format.mintick) + ", C " + str.tostring(cPx, format.mintick) +
+         ", цель 1.0 " + str.tostring(tg1, format.mintick) : "") + ". Подсказка для анализа, не сигнал к сделке."
+
+if dynAlerts and barstate.isconfirmed
+    if toZone or toExh or toTrig
+        alert(f_alertMsg("смена статуса"), alert.freq_once_per_bar_close)
+    if emaCross
+        alert(f_alertMsg("EMA 5/34 пересеклись"), alert.freq_once_per_bar_close)
+    if breakA
+        alert(f_alertMsg("пробой уровня отмены A"), alert.freq_once_per_bar_close)
+    if breakTrig
+        alert(f_alertMsg("пробой первого триггера"), alert.freq_once_per_bar_close)
