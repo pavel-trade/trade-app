@@ -919,3 +919,239 @@ if barstate.islast
         else
             bx.set_bgcolor(color.new(C_UP, 100))
             bx.set_text("")
+
+// ============================================================================
+// M5. Каналы Эллиотта (по ручной разметке M3)
+// ============================================================================
+const string G5 = "5. Каналы (по ручной разметке)"
+bool m5Ch4 = input.bool(true, "Канал волны 4: линия 2-4 и параллель через 3", group = G5,
+     tooltip = "Параллель через 3 — ориентир для волны 5. Нужны точки 0-4 разметки импульса или диагонали.")
+bool m5Via1 = input.bool(false, "Параллель через 1 (при растянутой 3)", group = G5,
+     tooltip = "В детализации «Всё» включается автоматически.")
+bool m5Base = input.bool(true, "«Норма о каналах»: линия 1-3, параллель через 2", group = G5,
+     tooltip = "Средняя линия канала 1-3 — минимальная цель волны 4, удвоенный канал — граница. Нужны точки 0-3.")
+
+var array<line> chLines = array.new<line>()
+var array<label> chLabels = array.new<label>()
+if barstate.islast
+    if chLines.size() == 0
+        for i = 0 to 6
+            chLines.push(line.new(na, na, na, na, extend = extend.right, width = 1))
+            chLabels.push(label.new(na, na, "", style = label.style_label_left, size = size.tiny))
+    for ln in chLines
+        ln.set_color(color.new(C_MUTED, 100))
+    for lb in chLabels
+        lb.set_text("")
+    bool impLike = m3On and not wCorr and wN >= 4
+    int xR = bar_index + lblOffset
+    int nCh = 0
+    if impLike
+        // y(x) = y1 + slope * (x - x1)
+        if m5Base
+            float sl = (wPx.get(3) - wPx.get(1)) / (wBar.get(3) - wBar.get(1))
+            float w = (wPx.get(1) + sl * (wBar.get(2) - wBar.get(1))) - wPx.get(2)    // ширина канала 1-3 по вертикали
+            array<float> y0 = array.from(wPx.get(1), wPx.get(2), wPx.get(1) - w / 2, wPx.get(2) - w)
+            array<string> nm = array.from("линия 1-3", "параллель через 2", "мин. цель 4 (средняя)", "граница (удвоенный канал)")
+            for j = 0 to 3
+                int x1 = j == 1 or j == 3 ? wBar.get(2) : wBar.get(1)
+                float y1 = y0.get(j)
+                line ln = chLines.get(nCh)
+                ln.set_xy1(x1, y1)
+                ln.set_xy2(x1 + 1, y1 + sl)
+                ln.set_color(color.new(C_MUTED, j >= 2 ? 30 : 10))
+                ln.set_style(j >= 2 ? line.style_dotted : line.style_solid)
+                if dl >= 1
+                    label lb = chLabels.get(nCh)
+                    lb.set_xy(xR, y1 + sl * (xR - x1))
+                    lb.set_text(nm.get(j))
+                    lb.set_textcolor(C_MUTED)
+                    lb.set_color(color.new(C_BG, 30))
+                nCh += 1
+        if m5Ch4 and wN >= 5
+            float sl4 = (wPx.get(4) - wPx.get(2)) / (wBar.get(4) - wBar.get(2))
+            array<int> px = array.from(2, 3, 1)
+            array<string> nm4 = array.from("линия 2-4", "цель волны 5 (через 3)", "параллель через 1")
+            int jMax = m5Via1 or dl == 2 ? 2 : 1
+            for j = 0 to jMax
+                int k = px.get(j)
+                line ln = chLines.get(nCh)
+                ln.set_xy1(wBar.get(k), wPx.get(k))
+                ln.set_xy2(wBar.get(k) + 1, wPx.get(k) + sl4)
+                ln.set_color(color.new(wCol, j == 0 ? 10 : 30))
+                ln.set_style(j == 0 ? line.style_solid : line.style_dashed)
+                if dl >= 1
+                    label lb = chLabels.get(nCh)
+                    lb.set_xy(xR, wPx.get(k) + sl4 * (xR - wBar.get(k)))
+                    lb.set_text(nm4.get(j))
+                    lb.set_textcolor(wCol)
+                    lb.set_color(color.new(C_BG, 30))
+                nCh += 1
+
+// ============================================================================
+// M6. Anchored VWAP (hlc3)
+// От C — переякоривается вместе со структурой; пока C не подтверждён, линия бледная
+// (может переякориться). В момент переякоривания линия прерывается.
+// ============================================================================
+const string G6 = "6. Anchored VWAP"
+bool vwFromC = input.bool(true, "От C (авто)", group = G6)
+bool vwFromA = input.bool(false, "От A (авто)", group = G6)
+bool vwManual = input.bool(false, "От даты", group = G6, inline = "vm")
+// 1789430400000 = 15.09.2026 00:00 UTC (defval — только числом, timestamp() сюда нельзя)
+int vwT = input.time(1789430400000, "", confirm = false, group = G6, inline = "vm")
+
+float vwC = hasStruct and hasVol and cumV - cV0 > 0 ? (cumPV - cPV0) / (cumV - cV0) : na
+float vwA = hasStruct and hasVol and cumV - aV0 > 0 ? (cumPV - aPV0) / (cumV - aV0) : na
+bool cMoved = cBar != cBar[1] or sCand != sCand[1]
+bool aMoved = aBar != aBar[1]
+
+var array<TPt> vwPts = f_newPts(array.from(vwT))
+f_detect(vwPts)
+TPt vwP = vwPts.get(0)
+float vwM = vwP.done and hasVol and cumV - vwP.v0 > 0 ? (cumPV - vwP.pv0) / (cumV - vwP.v0) : na
+
+plot(vwFromC and not cMoved ? vwC : na, "AVWAP от C", color = color.new(C_VW, sCand == 1 ? 55 : 0), linewidth = 2, style = plot.style_linebr)
+plot(vwFromA and not aMoved ? vwA : na, "AVWAP от A", color = color.new(C_VW, 40), linewidth = 1, style = plot.style_linebr)
+plot(vwManual ? vwM : na, "AVWAP от даты", color = color.new(C_ACC, 0), linewidth = 2, style = plot.style_linebr)
+
+// ============================================================================
+// M7. Профиль объёма фиксированного диапазона
+// Объём бара делится между ценовыми уровнями пропорционально пересечению [low; high]
+// с уровнем. Считается только на последнем баре, по ограниченному числу баров.
+// ============================================================================
+const string G7 = "7. Профиль объёма"
+const string VP_AB = "Нога A-B"
+const string VP_AC = "Структура A-C"
+const string VP_MAN = "Вручную по датам"
+bool m7On = input.bool(true, "Включить профиль", group = G7)
+string vpSrc = input.string(VP_AB, "Диапазон", options = [VP_AB, VP_AC, VP_MAN], group = G7)
+int vpT1 = input.time(0, "Начало (вручную)", confirm = false, group = G7)
+int vpT2 = input.time(0, "Конец (вручную)", confirm = false, group = G7)
+int vpRows = input.int(40, "Уровней", minval = 10, maxval = 100, group = G7)
+float vpVA = input.float(70.0, "Value Area, %", minval = 50.0, maxval = 95.0, step = 5.0, group = G7)
+bool vpBars = input.bool(true, "Горизонтальные бары справа от диапазона", group = G7,
+     tooltip = "В детализации «Минимум» рисуются только POC и границы Value Area.")
+int vpWidth = input.int(30, "Ширина баров профиля, баров графика", minval = 5, maxval = 200, group = G7)
+int vpMaxBars = input.int(1500, "Не больше баров в диапазоне", minval = 50, maxval = 3000, group = G7,
+     tooltip = "Ограничение объёма вычислений. Длинный диапазон обрезается слева.")
+
+var array<TPt> vpPts = f_newPts(array.from(vpT1, vpT2))
+f_detect(vpPts)
+
+// копии рядов с явным буфером истории для ограниченного цикла на последнем баре
+float hiS = high
+float loS = low
+float vS = volZ
+max_bars_back(hiS, 5000)
+max_bars_back(loS, 5000)
+max_bars_back(vS, 5000)
+
+var array<box> vpBoxes = array.new<box>()
+var array<line> vpLines = array.new<line>()
+var array<label> vpLabels = array.new<label>()
+string vpNote = ""
+float vpPoc = na
+float vpVah = na
+float vpVal = na
+
+if barstate.islast
+    if vpLines.size() == 0
+        for i = 0 to 2
+            vpLines.push(line.new(na, na, na, na, width = 2))
+            vpLabels.push(label.new(na, na, "", style = label.style_label_left, size = size.tiny))
+        for i = 0 to 99
+            vpBoxes.push(box.new(na, na, na, na, border_color = color.new(C_ACC, 100), bgcolor = color.new(C_ACC, 100)))
+    for b in vpBoxes
+        b.set_bgcolor(color.new(C_ACC, 100))
+    for ln in vpLines
+        ln.set_color(color.new(C_MUTED, 100))
+    for lb in vpLabels
+        lb.set_text("")
+    int r1 = na
+    int r2 = na
+    if vpSrc == VP_MAN
+        if vpPts.get(0).done and vpPts.get(1).done
+            r1 := vpPts.get(0).bar
+            r2 := vpPts.get(1).bar
+    else if hasStruct
+        r1 := aBar
+        r2 := vpSrc == VP_AB ? bBar : cBar
+    if not m7On
+        vpNote := "профиль выключен"
+    else if not hasVol
+        vpNote := "объём недоступен для этого символа — профиль отключён"
+    else if na(r1) or na(r2) or r2 < r1
+        vpNote := "нет диапазона для профиля"
+    else if bar_index - r1 > 4999
+        vpNote := "диапазон слишком далеко в прошлом (> 5000 баров)"
+    else
+        if r2 - r1 + 1 > vpMaxBars
+            r1 := r2 - vpMaxBars + 1
+            vpNote := "диапазон обрезан до " + str.tostring(vpMaxBars) + " баров"
+        float lo = na
+        float hi = na
+        for j = r1 to r2
+            lo := na(lo) ? loS[bar_index - j] : math.min(lo, loS[bar_index - j])
+            hi := na(hi) ? hiS[bar_index - j] : math.max(hi, hiS[bar_index - j])
+        if hi > lo
+            float step = (hi - lo) / vpRows
+            array<float> vols = array.new<float>(vpRows, 0.0)
+            for j = r1 to r2
+                float h = hiS[bar_index - j]
+                float l = loS[bar_index - j]
+                float v = vS[bar_index - j]
+                if v > 0
+                    if h <= l
+                        int kk = math.min(int((l - lo) / step), vpRows - 1)
+                        vols.set(kk, vols.get(kk) + v)
+                    else
+                        int k0 = math.max(0, math.min(int((l - lo) / step), vpRows - 1))
+                        int k1 = math.max(0, math.min(int((h - lo) / step), vpRows - 1))
+                        for k = k0 to k1
+                            float ov = math.min(h, lo + (k + 1) * step) - math.max(l, lo + k * step)
+                            if ov > 0
+                                vols.set(k, vols.get(k) + v * ov / (h - l))
+            float total = vols.sum()
+            int poc = vols.indexof(vols.max())
+            int up = poc + 1
+            int dn = poc - 1
+            int top = poc
+            int bot = poc
+            float acc = vols.get(poc)
+            while acc < vpVA / 100.0 * total and (up < vpRows or dn >= 0)
+                float vu = up < vpRows ? vols.get(up) : -1.0
+                float vd = dn >= 0 ? vols.get(dn) : -1.0
+                if vu >= vd
+                    acc += vu
+                    top := up
+                    up += 1
+                else
+                    acc += vd
+                    bot := dn
+                    dn -= 1
+            vpPoc := lo + (poc + 0.5) * step
+            vpVah := lo + (top + 1) * step
+            vpVal := lo + bot * step
+            float vmax = vols.max()
+            if vpBars and dl >= 1 and vmax > 0
+                for k = 0 to vpRows - 1
+                    float vk = vols.get(k)
+                    if vk > 0
+                        int w = math.max(1, int(math.round(vpWidth * vk / vmax)))
+                        int tr = k == poc ? 35 : k >= bot and k <= top ? 65 : 85
+                        box bx = vpBoxes.get(k)
+                        bx.set_lefttop(r2 + 1, lo + (k + 1) * step)
+                        bx.set_rightbottom(r2 + 1 + w, lo + k * step)
+                        bx.set_bgcolor(color.new(C_ACC, tr))
+            array<float> ys = array.from(vpPoc, vpVah, vpVal)
+            array<string> nm = array.from("POC", "VAH", "VAL")
+            for i = 0 to 2
+                line ln = vpLines.get(i)
+                ln.set_xy1(r1, ys.get(i))
+                ln.set_xy2(r2 + vpWidth + 2, ys.get(i))
+                ln.set_color(color.new(C_ACC, i == 0 ? 0 : 40))
+                ln.set_style(i == 0 ? line.style_solid : line.style_dashed)
+                label lb = vpLabels.get(i)
+                lb.set_xy(r2 + vpWidth + 2, ys.get(i))
+                lb.set_text(nm.get(i) + " " + str.tostring(ys.get(i), format.mintick))
+                lb.set_textcolor(C_ACC)
+                lb.set_color(color.new(C_BG, 30))
