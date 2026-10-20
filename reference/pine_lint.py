@@ -24,7 +24,8 @@ import sys
 
 TA_RE = re.compile(r"\bta\.\w+\s*\(")
 FUNC_DEF_RE = re.compile(r"^(\w+)\s*\(([^)]*)\)\s*=>")
-EMOJI_RE = re.compile("[\U0001F000-\U0001FAFF☀-➿️]")
+# эмодзи-картинки и селектор эмодзи; типографские символы (✓ ✗ ▲ ①) допустимы
+EMOJI_RE = re.compile("[\U0001F000-\U0001FAFF\uFE0F\u2705\u274C\u274E\u2B50\u2B55\u26A0\u26D4]")
 
 
 def strip_strings_comments(line: str) -> str:
