@@ -296,3 +296,113 @@ if not na(phV)
     hiBar := cb
     hiSpd := phV
     hiPx := pxHiAtPivot
+
+// ============================================================================
+// 4. Режим «Пики волн 1-3-5»
+// Пользователь задаёт даты точек 0..5. Бар точки — первый бар, у которого время закрытия
+// позже заданного (свеча, содержащая эту дату, или первая после разрыва). Экстремумы скорости
+// по отрезкам копятся «на ходу» через var — без циклов по истории. Рисование — на последнем баре.
+// ============================================================================
+const string G6 = "6. Пики волн 1-3-5"
+// 0 = точка не задана. Пример даты: 1789430400000 = 15.09.2026 00:00 UTC (только число, не timestamp()).
+int wt0 = input.time(0, "Точка 0 (начало)", confirm = false, group = G6,
+     tooltip = "Задайте даты точек 0-5 изучаемой волны. Режим включается, когда заданы хотя бы точки 0 и 1; классификация — когда заданы все шесть. Если точки не заданы, режим ничего не рисует.")
+int wt1 = input.time(0, "Точка 1", confirm = false, group = G6)
+int wt2 = input.time(0, "Точка 2", confirm = false, group = G6)
+int wt3 = input.time(0, "Точка 3", confirm = false, group = G6)
+int wt4 = input.time(0, "Точка 4", confirm = false, group = G6)
+int wt5 = input.time(0, "Точка 5 (конец)", confirm = false, group = G6)
+float k4 = input.float(0.35, "k: волна 4 «у нуля», если |экстремум 4| < k x |пик 3|", minval = 0.05, maxval = 1.0, step = 0.05, group = G6)
+bool showPeakLbl = input.bool(true, "Метки пиков и линия 1-3-5", group = G6)
+
+var array<int> wT = array.from(wt0, wt1, wt2, wt3, wt4, wt5)
+var array<bool> ptDone = array.new<bool>(6, false)
+var array<int> ptBar = array.new<int>(6, na)
+var array<float> ptCl = array.new<float>(6, na)
+var array<float> sMax = array.new<float>(5, na)     // волна k = индекс k-1
+var array<int> sMaxT = array.new<int>(5, na)
+var array<float> sMin = array.new<float>(5, na)
+var array<int> sMinT = array.new<int>(5, na)
+
+bool waveOn = wt0 > 0 and wt1 > 0
+int tcNow = na(time_close) ? time : time_close
+if waveOn
+    // фиксированные циклы по 6 точкам и 5 отрезкам (не по истории)
+    for i = 0 to 5
+        int ti = wT.get(i)
+        if ti > 0 and not ptDone.get(i) and tcNow > ti
+            ptDone.set(i, true)
+            ptBar.set(i, bar_index)
+            ptCl.set(i, close)
+    for k = 1 to 5
+        bool both = wT.get(k - 1) > 0 and wT.get(k) > 0
+        bool inSeg = both and ptDone.get(k - 1) and (not ptDone.get(k) or ptBar.get(k) == bar_index)
+        if inSeg and not na(speed)
+            int j = k - 1
+            if na(sMax.get(j)) or speed > sMax.get(j)
+                sMax.set(j, speed)
+                sMaxT.set(j, time)
+            if na(sMin.get(j)) or speed < sMin.get(j)
+                sMin.set(j, speed)
+                sMinT.set(j, time)
+
+// Классификация профиля. a1, a3, a5 — пики со знаком направления волны, c4 — экстремум волны 4 против направления.
+f_classify(float a1, float a3, float a5, float c4, float k) =>
+    string res = "неопределённо"
+    if not (na(a1) or na(a3) or na(a5) or na(c4))
+        if a3 > a1 and a3 > a5 and a3 > 0
+            res := math.abs(c4) < k * a3 ? "импульс" : "неопределённо (волна 4 не вернулась к нулю)"
+        else if a1 > a3 and a3 > a5
+            res := "сужающаяся диагональ (затухание)"
+        else if a1 < a3 and a3 < a5
+            res := "расширяющаяся диагональ (возрастание)"
+    res
+
+var array<label> pkLabels = array.new<label>()
+var array<line> pkLines = array.new<line>()
+string profileTxt = ""      // для таблицы (модуль 5); пусто — режим выключен
+
+if barstate.islast and waveOn
+    while pkLabels.size() > 0
+        pkLabels.pop().delete()
+    while pkLines.size() > 0
+        pkLines.pop().delete()
+    bool ordered = true
+    for i = 1 to 5
+        if wT.get(i) > 0 and wT.get(i) <= wT.get(i - 1)
+            ordered := false
+    if not ptDone.get(0) or not ptDone.get(1)
+        profileTxt := "точки 0-1 вне загруженной истории"
+    else if not ordered
+        profileTxt := "точки идут не по порядку дат"
+    else
+        bool has5 = wT.get(5) > 0 and ptDone.get(5)
+        int s = (has5 ? ptCl.get(5) > ptCl.get(0) : ptCl.get(1) > ptCl.get(0)) ? 1 : -1
+        array<float> pv = array.new<float>(5, na)
+        array<int> pt = array.new<int>(5, na)
+        int nSeg = 0
+        for j = 0 to 4
+            bool segOk = wT.get(j) > 0 and wT.get(j + 1) > 0 and ptDone.get(j) and ptDone.get(j + 1) and ptBar.get(j + 1) > ptBar.get(j)
+            if segOk
+                bool wantMax = (j % 2 == 0) == (s == 1)
+                pv.set(j, wantMax ? sMax.get(j) : sMin.get(j))
+                pt.set(j, wantMax ? sMaxT.get(j) : sMinT.get(j))
+                nSeg += 1
+                if showPeakLbl and not na(pv.get(j))
+                    color pc = pv.get(j) >= 0 ? C_UP : C_DN
+                    pkLabels.push(label.new(pt.get(j), pv.get(j), (j % 2 == 0 ? "пик " : "экстр. ") + str.tostring(j + 1),
+                         xloc = xloc.bar_time, color = color.new(pc, 20), textcolor = color.white, size = size.small,
+                         style = pv.get(j) * s >= 0 ? label.style_label_down : label.style_label_up))
+        if showPeakLbl
+            for j = 0 to 2 by 2
+                if not na(pv.get(j)) and not na(pv.get(j + 2))
+                    pkLines.push(line.new(pt.get(j), pv.get(j), pt.get(j + 2), pv.get(j + 2), xloc = xloc.bar_time,
+                         color = C_ACC, width = 2))
+        if nSeg == 5
+            profileTxt := f_classify(s * pv.get(0), s * pv.get(2), s * pv.get(4), pv.get(3), k4)
+        else
+            profileTxt := "задайте все точки 0-5 для классификации"
+        if showPeakLbl and nSeg == 5 and not na(pv.get(4))
+            pkLabels.push(label.new(pt.get(4), 0.0, profileTxt + "\nпрофиль скорости, не разметка", xloc = xloc.bar_time,
+                 color = color.new(C_TBL_BG, 0), textcolor = C_TX, size = size.small,
+                 style = s == 1 ? label.style_label_up : label.style_label_down))
