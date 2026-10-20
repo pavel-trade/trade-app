@@ -518,3 +518,35 @@ if barstate.islast and showTbl
         f_cell(0, row, "Масштаб ускорения", C_TX, C_TBL_BG)
         f_cell(1, row, "x" + str.tostring(na(autoMult) ? accMult : autoMult, "0.0#"), C_ACC, C_TBL_BG)
         f_cell(2, row, na(autoMult) ? "мало истории, фикс." : "P" + str.tostring(autoPct, "0") + " за " + str.tostring(autoLen) + " бар.", C_TX, C_TBL_BG)
+
+// ============================================================================
+// 6. Оповещения
+// alertcondition — для меню «Создать оповещение» (частота «Раз за закрытие бара»).
+// alert() — динамический текст, только на закрытом баре (barstate.isconfirmed).
+// ============================================================================
+const string G8 = "8. Оповещения"
+bool dynAlerts = input.bool(true, "Динамические оповещения alert()", group = G8,
+     tooltip = "Создайте оповещение с условием «Любой вызов функции alert()». В тексте — символ, ТФ, фаза, скорость и ускорение. Срабатывают только на закрытом баре.")
+
+alertcondition(accUpRaw, "Ускорение стало > 0", "{{ticker}} {{interval}}: ускорение спидометра стало > 0")
+alertcondition(accDnRaw, "Ускорение стало < 0", "{{ticker}} {{interval}}: ускорение спидометра стало < 0")
+alertcondition(spdUpRaw, "Скорость стала > 0 (конец слепой зоны)", "{{ticker}} {{interval}}: скорость стала > 0, слепая зона закончилась")
+alertcondition(spdDnRaw, "Скорость стала < 0 (конец слепой зоны)", "{{ticker}} {{interval}}: скорость стала < 0, слепая зона закончилась")
+alertcondition(bullReg, "Обычная бычья дивергенция", "{{ticker}} {{interval}}: обычная бычья дивергенция скорости")
+alertcondition(bearReg, "Обычная медвежья дивергенция", "{{ticker}} {{interval}}: обычная медвежья дивергенция скорости")
+alertcondition(bullHid, "Скрытая бычья дивергенция", "{{ticker}} {{interval}}: скрытая бычья дивергенция скорости")
+alertcondition(bearHid, "Скрытая медвежья дивергенция", "{{ticker}} {{interval}}: скрытая медвежья дивергенция скорости")
+
+f_alertMsg(string what) =>
+    syminfo.ticker + " " + timeframe.period + ": " + what + ". Фаза: " + f_phaseName(phaseId) +
+         ", скорость " + f_fmt(speed) + ", ускорение " + f_fmt(accel)
+
+if dynAlerts and barstate.isconfirmed
+    if accUpRaw or accDnRaw
+        alert(f_alertMsg(accUpRaw ? "ускорение стало > 0" : "ускорение стало < 0"), alert.freq_once_per_bar_close)
+    if spdUpRaw or spdDnRaw
+        alert(f_alertMsg(spdUpRaw ? "скорость стала > 0, конец слепой зоны" : "скорость стала < 0, конец слепой зоны"), alert.freq_once_per_bar_close)
+    if bullReg or bearReg
+        alert(f_alertMsg(bullReg ? "обычная бычья дивергенция" : "обычная медвежья дивергенция"), alert.freq_once_per_bar_close)
+    if bullHid or bearHid
+        alert(f_alertMsg(bullHid ? "скрытая бычья дивергенция" : "скрытая медвежья дивергенция"), alert.freq_once_per_bar_close)
