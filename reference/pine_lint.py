@@ -12,7 +12,8 @@
      (отступ 4), не в if/for/while, не после ?, and, or в той же строке.
      Функции, внутри которых есть ta.*, вызываются тоже только безусловно.
   4. request.security: не больше 3 вызовов, всегда lookahead = barmerge.lookahead_off.
-  5. Заданы max_lines_count, max_labels_count, max_boxes_count (если объекты создаются).
+  5. Заданы max_lines_count, max_labels_count, max_boxes_count, max_polylines_count
+     (если объекты создаются); история по счётчику цикла — только с max_bars_back.
   6. table.new — только в объявлении var; таблица заполняется в if barstate.islast.
   7. Нет эмодзи.
 """
@@ -133,9 +134,24 @@ def lint(path: str) -> list[str]:
 
     # 5. лимиты объектов
     head = " ".join(code[:15])
-    for kind, lim in (("line.new", "max_lines_count"), ("label.new", "max_labels_count"), ("box.new", "max_boxes_count")):
+    for kind, lim in (("line.new", "max_lines_count"), ("label.new", "max_labels_count"), ("box.new", "max_boxes_count"),
+                      ("polyline.new", "max_polylines_count")):
         if kind in text and lim not in head:
             err(0, f"используется {kind}, но не задан {lim}")
+
+    # 5б. цикл с исторической ссылкой по счётчику цикла — нужен max_bars_back для этого ряда
+    for n, l in enumerate(code):
+        m = re.match(r"^(\s*)for\s+(\w+)\s*=", l)
+        if not m:
+            continue
+        ind, var = len(m.group(1)), m.group(2)
+        for k in range(n + 1, len(code)):
+            lk = code[k]
+            if lk.strip() and len(lk) - len(lk.lstrip(" ")) <= ind:
+                break
+            for h in re.finditer(rf"\b(\w+)\[[^\]]*\b{var}\b[^\]]*\]", lk):
+                if not re.search(rf"max_bars_back\(\s*{h.group(1)}\b", text):
+                    err(k, f"история {h.group(1)}[{var}] в цикле без max_bars_back({h.group(1)}, ...)")
 
     # 6. таблицы
     for n, l in enumerate(code):

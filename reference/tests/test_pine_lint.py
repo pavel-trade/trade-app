@@ -17,7 +17,7 @@ def lint_text(tmp_path, body):
 
 
 def test_project_files_clean():
-    for f in ("tw_speedometer_pro.pine", "tw_blind_zone_pro.pine"):
+    for f in ("tw_speedometer.pine", "tw_speedometer_pro.pine", "tw_blind_zone_pro.pine"):
         assert pine_lint.lint(os.path.join(ROOT, "pine", f)) == []
 
 
@@ -55,3 +55,15 @@ def test_table_rules(tmp_path):
     assert lint_text(tmp_path, 'var table t = table.new(position.top_right, 1, 1)\ntable.cell(t, 0, 0, "a")\n')
     ok = 'var table t = table.new(position.top_right, 1, 1)\nif barstate.islast\n    table.cell(t, 0, 0, "a")\n'
     assert lint_text(tmp_path, ok) == []
+
+
+def test_history_loop_needs_max_bars_back(tmp_path):
+    body = "float a = close\nif barstate.islast\n    for i = 0 to 10\n        x = a[i]\n"
+    assert lint_text(tmp_path, body)
+    assert lint_text(tmp_path, "float a = close\nmax_bars_back(a, 100)\n" + body.split("\n", 1)[1]) == []
+
+
+def test_polyline_needs_limit(tmp_path):
+    p = tmp_path / "p.pine"
+    p.write_text('//@version=6\nindicator("x")\nvar polyline pl = na\nif barstate.islast\n    pl := polyline.new(array.new<chart.point>())\n', encoding="utf-8")
+    assert pine_lint.lint(str(p))
