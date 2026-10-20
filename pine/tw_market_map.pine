@@ -141,3 +141,301 @@ fill(pF, pS, color = m1On and showFill ? (emaDiff > 0 ? color.new(C_UP, 85) : co
 plot(m1On and showSma200 ? sma200 : na, "SMA 200", color = color.new(C_TX, 25), linewidth = 2)
 plot(m1On and showEma20 ? ema20 : na, "EMA 20", color = color.new(C_OK, 0), linewidth = 1)
 plot(m1On and showEma50 ? ema50 : na, "EMA 50", color = color.new(C_ACC, 0), linewidth = 1)
+
+// ============================================================================
+// M2. ZigZag и точки разворота
+// Свинги хранятся в массивах и чередуются (два максимума подряд — остаётся больший,
+// два минимума — меньший). Для каждой ноги копятся пик скорости, объём и число баров
+// по полуоткрытому отрезку (предыдущий свинг; свинг]. В режиме пивотов накопление идёт
+// с лагом L баров (бар i - L), поэтому к моменту подтверждения пивота нога посчитана ровно
+// до его бара — без циклов по истории.
+// ============================================================================
+const string G2 = "2. ZigZag и точки разворота"
+const string Z_PIV = "Пивоты (L баров)"
+const string Z_PCT = "Процентный ZigZag"
+bool m2Show = input.bool(true, "Показывать ZigZag", group = G2,
+     tooltip = "Свинги считаются всегда — на них опираются модули 4 и 6-10. Переключатель отвечает только за отрисовку.")
+string zzMode = input.string(Z_PIV, "Режим", options = [Z_PIV, Z_PCT], group = G2,
+     tooltip = "Пивоты: ta.pivothigh/ta.pivotlow длины L — свинг подтверждается через L баров. Процентный: разворот, когда цена ушла от экстремума на заданный %.")
+int zzLen = input.int(10, "Длина пивота L", minval = 2, maxval = 50, group = G2)
+float zzPct = input.float(5.0, "Порог процентного ZigZag, %", minval = 0.1, maxval = 50.0, step = 0.5, group = G2)
+int minorLen = input.int(3, "Малые пивоты (первый триггер)", minval = 1, maxval = 10, group = G2,
+     tooltip = "Малые пивоты используются для «первого триггера» — последнего локального экстремума внутри коррекции.")
+bool legInfoIn = input.bool(false, "Информация о ногах: %, бары, объём/бар", group = G2,
+     tooltip = "В детализации «Всё» включается автоматически.")
+int maxSwDraw = input.int(30, "Рисовать последних свингов", minval = 5, maxval = 100, group = G2)
+
+bool isPiv = zzMode == Z_PIV
+int L = zzLen
+bool legInfo = legInfoIn or dl == 2
+
+// ta.* — на глобальном уровне, на каждом баре
+float phMaj = ta.pivothigh(high, L, L)
+float plMaj = ta.pivotlow(low, L, L)
+float phMin = ta.pivothigh(high, minorLen, minorLen)
+float plMin = ta.pivotlow(low, minorLen, minorLen)
+float spdHiL = ta.highest(speed, L)
+float spdLoL = ta.lowest(speed, L)
+float volZ = nz(volume)
+float volSumL = math.sum(volZ, L)
+float loL = ta.lowest(low, L)
+int loLOff = ta.lowestbars(low, L)
+float hiL = ta.highest(high, L)
+int hiLOff = ta.highestbars(high, L)
+
+var float cumPV = 0.0
+var float cumV = 0.0
+cumPV += hlc3 * volZ
+cumV += volZ
+var bool hasVol = false
+if volZ > 0
+    hasVol := true
+
+// свинги и ноги (нога i закончилась в свинге i)
+const int MAX_SW = 60
+var array<int> swBar = array.new<int>()
+var array<float> swPx = array.new<float>()
+var array<int> swDir = array.new<int>()
+var array<float> swSpd = array.new<float>()
+var array<float> swPV0 = array.new<float>()
+var array<float> swV0 = array.new<float>()
+var array<float> lgMx = array.new<float>()
+var array<float> lgMn = array.new<float>()
+var array<float> lgVol = array.new<float>()
+var array<int> lgN = array.new<int>()
+
+f_mx(float a, float b) =>
+    na(a) ? b : na(b) ? a : math.max(a, b)
+
+f_mn(float a, float b) =>
+    na(a) ? b : na(b) ? a : math.min(a, b)
+
+f_swPush(int b, float p, int d, float sp, float pv0, float v0, float mx, float mn, float vl, int n) =>
+    swBar.push(b)
+    swPx.push(p)
+    swDir.push(d)
+    swSpd.push(sp)
+    swPV0.push(pv0)
+    swV0.push(v0)
+    lgMx.push(mx)
+    lgMn.push(mn)
+    lgVol.push(vl)
+    lgN.push(n)
+    if swBar.size() > MAX_SW
+        swBar.shift()
+        swPx.shift()
+        swDir.shift()
+        swSpd.shift()
+        swPV0.shift()
+        swV0.shift()
+        lgMx.shift()
+        lgMn.shift()
+        lgVol.shift()
+        lgN.shift()
+
+f_swSetLast(int b, float p, float sp, float pv0, float v0, float mx, float mn, float vl, int n) =>
+    int k = swBar.size() - 1
+    swBar.set(k, b)
+    swPx.set(k, p)
+    swSpd.set(k, sp)
+    swPV0.set(k, pv0)
+    swV0.set(k, v0)
+    lgMx.set(k, mx)
+    lgMn.set(k, mn)
+    lgVol.set(k, vl)
+    lgN.set(k, n)
+
+// --- отрисовка свингов: линия от предыдущего свинга и подпись; при замене — set_*
+var array<line> zzLines = array.new<line>()
+var array<label> zzLabels = array.new<label>()
+
+f_swText(int k) =>
+    string t = str.tostring(swPx.get(k), format.mintick)
+    if legInfo and k > 0
+        float p0 = swPx.get(k - 1)
+        int n = lgN.get(k)
+        float va = n > 0 and hasVol ? lgVol.get(k) / n : na
+        t += "\n" + (swPx.get(k) >= p0 ? "+" : "") + str.tostring((swPx.get(k) / p0 - 1) * 100, "0.0") + " %, " +
+             str.tostring(swBar.get(k) - swBar.get(k - 1)) + " бар." + (na(va) ? "" : ", об./бар " + str.tostring(va, format.volume))
+    t
+
+f_drawSwing(bool replaced) =>
+    if m2Show
+        int k = swBar.size() - 1
+        int d = swDir.get(k)
+        string st = d == 1 ? label.style_label_down : label.style_label_up
+        if replaced and zzLabels.size() > 0
+            label lb = zzLabels.last()
+            lb.set_xy(swBar.get(k), swPx.get(k))
+            lb.set_text(dl >= 1 ? f_swText(k) : "")
+            if k > 0 and zzLines.size() > 0
+                zzLines.last().set_xy2(swBar.get(k), swPx.get(k))
+        else
+            if k > 0
+                zzLines.push(line.new(swBar.get(k - 1), swPx.get(k - 1), swBar.get(k), swPx.get(k), color = C_ACC, width = 2))
+            zzLabels.push(label.new(swBar.get(k), swPx.get(k), dl >= 1 ? f_swText(k) : "", style = st,
+                 color = color.new(C_ACC, dl >= 1 ? 80 : 100), textcolor = C_TX, size = size.tiny))
+            if zzLines.size() > maxSwDraw
+                zzLines.shift().delete()
+            if zzLabels.size() > maxSwDraw
+                zzLabels.shift().delete()
+
+// накопитель текущей ноги и текущий (незавершённый) экстремум против последнего свинга
+var float aMx = na
+var float aMn = na
+var float aVol = 0.0
+var int aN = 0
+var float rnPx = na
+var int rnBar = na
+var float rnSpd = na
+var float rnPV0 = na
+var float rnV0 = na
+bool newSwing = false
+
+if isPiv
+    // нога копится с лагом L баров
+    if bar_index >= L
+        aMx := f_mx(aMx, speed[L])
+        aMn := f_mn(aMn, speed[L])
+        aVol += volZ[L]
+        aN += 1
+    // текущий экстремум обновляется текущим баром
+    if swBar.size() > 0 and not na(rnPx)
+        if swDir.last() == 1 and low < rnPx
+            rnPx := low
+            rnBar := bar_index
+            rnSpd := speed
+            rnPV0 := nz(cumPV[1])
+            rnV0 := nz(cumV[1])
+        else if swDir.last() == -1 and high > rnPx
+            rnPx := high
+            rnBar := bar_index
+            rnSpd := speed
+            rnPV0 := nz(cumPV[1])
+            rnV0 := nz(cumV[1])
+    int firstD = swDir.size() > 0 and swDir.last() == 1 ? -1 : 1
+    for k = 0 to 1
+        int d = k == 0 ? firstD : -firstD
+        float pv = d == 1 ? phMaj : plMaj
+        if not na(pv)
+            bool same = swDir.size() > 0 and swDir.last() == d
+            bool doIt = not same or (d == 1 ? pv > swPx.last() : pv < swPx.last())
+            if doIt
+                if same
+                    int kk = swBar.size() - 1
+                    f_swSetLast(bar_index - L, pv, speed[L], nz(cumPV[L + 1]), nz(cumV[L + 1]),
+                         f_mx(lgMx.get(kk), aMx), f_mn(lgMn.get(kk), aMn), lgVol.get(kk) + aVol, lgN.get(kk) + aN)
+                else
+                    f_swPush(bar_index - L, pv, d, speed[L], nz(cumPV[L + 1]), nz(cumV[L + 1]), aMx, aMn, aVol, aN)
+                f_drawSwing(same)
+                aMx := na
+                aMn := na
+                aVol := 0.0
+                aN := 0
+                newSwing := true
+                // экстремум против нового свинга на отрезке (пивот; текущий бар]
+                int off = d == 1 ? loLOff : hiLOff
+                rnPx := d == 1 ? loL : hiL
+                rnBar := bar_index + off
+                rnSpd := speed[-off]
+                rnPV0 := nz(cumPV[-off + 1])
+                rnV0 := nz(cumV[-off + 1])
+
+// процентный ZigZag: кандидат-экстремум, «снимок» ноги на баре кандидата и нога после кандидата
+var int zDir = 1
+var float snMx = na
+var float snMn = na
+var float snVol = 0.0
+var int snN = 0
+var float siMx = na
+var float siMn = na
+var float siVol = 0.0
+var int siN = 0
+if not isPiv
+    aMx := f_mx(aMx, speed)
+    aMn := f_mn(aMn, speed)
+    aVol += volZ
+    aN += 1
+    siMx := f_mx(siMx, speed)
+    siMn := f_mn(siMn, speed)
+    siVol += volZ
+    siN += 1
+    float thr = zzPct / 100.0
+    bool newCand = false
+    bool confirm = false
+    if na(rnPx)
+        newCand := true
+    else if zDir == 1
+        if high > rnPx
+            newCand := true
+        else if low <= rnPx * (1 - thr)
+            confirm := true
+    else
+        if low < rnPx
+            newCand := true
+        else if high >= rnPx * (1 + thr)
+            confirm := true
+    if confirm
+        f_swPush(rnBar, rnPx, zDir, rnSpd, rnPV0, rnV0, snMx, snMn, snVol, snN)
+        f_drawSwing(false)
+        newSwing := true
+        aMx := siMx
+        aMn := siMn
+        aVol := siVol
+        aN := siN
+        zDir := -zDir
+        newCand := true
+    if newCand
+        rnPx := zDir == 1 ? high : low
+        rnBar := bar_index
+        rnSpd := speed
+        rnPV0 := nz(cumPV[1])
+        rnV0 := nz(cumV[1])
+        snMx := aMx
+        snMn := aMn
+        snVol := aVol
+        snN := aN
+        siMx := na
+        siMn := na
+        siVol := 0.0
+        siN := 0
+
+bool hasRun = swBar.size() > 0 and not na(rnPx)
+// статистика текущей (незавершённой) ноги (последний свинг; сейчас]
+float rlMx = isPiv ? f_mx(aMx, spdHiL) : aMx
+float rlMn = isPiv ? f_mn(aMn, spdLoL) : aMn
+float rlVol = isPiv ? aVol + nz(volSumL) : aVol
+int rlN = isPiv ? aN + L : aN
+
+// малые пивоты (для «первого триггера»)
+const int MAX_MINOR = 40
+var array<int> mhBar = array.new<int>()
+var array<float> mhPx = array.new<float>()
+var array<int> mlBar = array.new<int>()
+var array<float> mlPx = array.new<float>()
+if not na(phMin)
+    mhBar.push(bar_index - minorLen)
+    mhPx.push(phMin)
+    if mhBar.size() > MAX_MINOR
+        mhBar.shift()
+        mhPx.shift()
+if not na(plMin)
+    mlBar.push(bar_index - minorLen)
+    mlPx.push(plMin)
+    if mlBar.size() > MAX_MINOR
+        mlBar.shift()
+        mlPx.shift()
+
+// последний незавершённый отрезок — пунктиром, с пометкой о возможной перерисовке
+var line zzLive = na
+var label zzLiveLbl = na
+if barstate.islast and m2Show and hasRun
+    int kL = swBar.size() - 1
+    if na(zzLive)
+        zzLive := line.new(swBar.get(kL), swPx.get(kL), rnBar, rnPx, color = color.new(C_ACC, 30), width = 1, style = line.style_dashed)
+        zzLiveLbl := label.new(rnBar, rnPx, "", color = color.new(C_ACC, 100), textcolor = C_MUTED, size = size.tiny)
+    zzLive.set_xy1(swBar.get(kL), swPx.get(kL))
+    zzLive.set_xy2(rnBar, rnPx)
+    zzLiveLbl.set_xy(rnBar, rnPx)
+    zzLiveLbl.set_style(swDir.get(kL) == 1 ? label.style_label_up : label.style_label_down)
+    zzLiveLbl.set_text(dl >= 1 ? "не подтверждён — может перерисоваться" : "?")
