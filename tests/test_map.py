@@ -270,3 +270,28 @@ def test_market_map_pine_lint():
     if not os.path.exists(path):
         pytest.skip("pine/tw_market_map.pine ещё не создан")
     assert pine_lint.lint(path) == []
+
+
+# --- research/component_value.py ---------------------------------------------
+def test_research_stats_and_trade_logic():
+    sys.path.insert(0, os.path.join(ROOT, "research"))
+    import component_value as cv
+    s = cv.stats([dict(R=2.0, hit=True), dict(R=-1.0, hit=False), dict(R=-1.0, hit=False)])
+    assert s["n"] == 3 and s["avgR"] == pytest.approx(0.0) and s["pf"] == pytest.approx(1.0) and s["dd"] == pytest.approx(2.0)
+    # сделка: стоп и цель в одном баре — считается стоп
+    bars = [Bar(i, 100, 101, 99, 100, 1.0) for i in range(3)] + [Bar(3, 100, 130, 80, 100, 1.0)]
+    ev = dict(bar=1, d=1, stop=90.0, targets={1.0: 120.0}, items=[1] * 9, status=3)
+    t = cv.trade(bars, ev, commission=0.0, max_hold=10)
+    assert t["hit"] is False and t["R"] == pytest.approx(-1.0)
+    t = cv.trade(bars, ev, commission=0.1, max_hold=10)
+    assert t["R"] < -1.0                                   # комиссия ухудшает R
+
+
+def test_research_random_walk_has_no_edge():
+    sys.path.insert(0, os.path.join(ROOT, "research"))
+    import component_value as cv
+    bars = cv.random_walk(3000, 7, 1640995200000, 4 * 3600_000)
+    tr = cv.analyze([("rw", bars)], mm.MapSettings(), 1672531200000, 0.1, 200)
+    s = cv.stats(tr)
+    assert s["n"] > 30
+    assert abs(s["avgR"]) < 0.5                            # на шуме нет устойчивого преимущества
