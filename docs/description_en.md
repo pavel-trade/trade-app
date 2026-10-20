@@ -1,87 +1,69 @@
-# TW Speedometer Pro
+# TW Speedometer — Speed + Acceleration
 
-**A tool for checking Elliott wave counts against price speed.** It is not a trading system:
-it gives no buy/sell signals and makes no claims about profitability or accuracy. It measures
-and displays how fast price moves; you decide what that means for your wave count.
+**A tool for checking Elliott wave counts against price speed.** It is not a trading system: it gives
+no buy/sell signals and makes no claims about profitability or accuracy. It measures and displays how
+fast price moves and whether that movement is speeding up or slowing down. You decide what that means
+for your wave count.
 
 ## What it calculates
 
-- **Speedometer line** — a linear MACD: EMA(5) − EMA(34) of `100 × ln(close)`. Taking the
-  logarithm makes the value a percentage, so peaks are comparable at any price level
-  (for example, BTC at 20k and at 120k). You can turn the logarithm off.
-- **Signal line** — EMA(5) of the speedometer line; **histogram** = line − signal.
-- **Awesome Oscillator** — SMA(5) − SMA(34) of `100 × ln(hl2)`.
-- **Optional ATR normalisation** — all values divided by ATR(14) in the same units, which
-  makes different instruments comparable.
-- **Phase colours** — a bright bar means speed is increasing, a pale bar means it is
-  decreasing. The palette is colour-blind friendly (Okabe-Ito), and every signal also has
-  a text label or line style, so colour is never the only cue.
+- **Speed** — a linear MACD: EMA(5) − EMA(34) of `100 × ln(close)`. Because it is based on the
+  logarithm, the value is a percentage, and peaks are comparable at any price level. You can turn
+  the logarithm off.
+- **Acceleration** — speed minus EMA(speed, 5), which is the MACD 5/34/5 histogram.
+- **Columns** — the height is speed and the brightness is acceleration in the direction of the move.
+  This gives four phases: rising and accelerating, rising and decelerating, falling and accelerating,
+  falling and decelerating. The palette is colour-blind friendly (Okabe-Ito). The phase is also
+  written out in the status table, so colour is never the only cue.
 - **Presets** — Williams 5/34/5 (default), Large pattern 13/55/13, Classic 12/26/9, Custom.
-  Display presets ("line only", "histogram only") let you add the indicator twice.
 
 ## Features
 
-- **Multi-timeframe table** — sign and phase of speed on three timeframes (accelerating /
-  decelerating up or down). It uses three `request.security` calls with `lookahead_off`
-  and takes the last *closed* higher-timeframe bar on history, so it does not repaint.
+- **Acceleration display** has three modes:
+  - an overlay line with a fixed multiplier (×3 by default);
+  - auto-scale: a multiplier computed **once**, on the last bar, as the ratio of the 95th percentiles
+    of |speed| and |acceleration| over the last N bars, so the scale is the same across all drawn history;
+  - a thin band at zero that shows only the sign and the strength.
+
+  A label at the right edge shows the scale in use.
+- **Early signals** — markers when acceleration changes sign, and when speed changes sign. A change in
+  the sign of speed is the EMA 5/34 crossover, which marks the end of the "blind zone". Optionally, markers
+  appear only after the bar closes.
+- **Divergences on speed** — regular and hidden, from `ta.pivothigh/pivotlow`. Price is compared using
+  the high/low in a window around the pivot. There is a noise filter (minimum difference as a share of
+  the speed range) and a sign filter. Divergences appear only after the pivot's "right bars" have
+  closed. This is a confirmation delay, not repainting, and the indicator does not anticipate anything.
+- **Wave peaks 1-3-5** — you enter dates for points 0-5. The indicator marks the speed extreme of every
+  leg, joins peaks 1-3-5 with a line and classifies the profile as "impulse", "contracting diagonal",
+  "expanding diagonal" or "undetermined". It is labelled as *a speed profile, not a wave count*. With
+  no points entered, the mode draws nothing.
+- **Status table** — the phase in words, speed, acceleration and current speed as a percentage of the
+  recent peak. It can also show the phase on up to three higher timeframes. These use `request.security`
+  with `lookahead_off` and take the last closed higher-timeframe bar on history, so they do not repaint.
   The cost is a lag of one higher-timeframe bar.
-- **Divergences** — regular and hidden, on the line, histogram or AO. Pivots come from
-  `ta.pivothigh/pivotlow`. Price is compared using the high/low in a window around the
-  pivot (not the close). Filters: zero line for regular divergences, minimum distance
-  between pivots, and a minimum difference as a share of the oscillator's range.
-  A **three-peak mode** compares waves 1-3-5 and labels the result "fading" or "growing".
-  Divergences appear only after the "right bars" of the pivot have closed. This is a
-  confirmation delay, not repainting, and the indicator does not anticipate anything.
-- **Blind zone** — the stretch from the price extreme to the EMA 5/34 crossover, during
-  which the linear MACD still shows the old trend. It is drawn as boxes or as background.
-- **Wave analysis table** — you enter points 0-5 of a wave. The table shows:
-  - the 100-140 bar rule, with a suggested timeframe (e.g. "≈ ×2.1 → use 2h");
-  - speedometer peaks per leg and the speed profile ("impulse", "contracting diagonal",
-    "expanding diagonal" or "undetermined"), shown as *a speed profile, not a wave count*;
-  - average volume per bar and its ratio to wave 3;
-  - log-scale wave ratios (3/1, 5/1, depth of 2 and 4) for comparison with Fibonacci levels.
-- **Volume** — average volume per leg and relative volume (volume / SMA 20). The volume
-  block switches itself off for symbols that have no volume data.
-- **Alerts** — `alertcondition` for each event, plus `alert()` messages with symbol,
-  timeframe and value, sent on confirmed bars only.
-
-A companion overlay, **TW Blind Zone Pro**, draws EMA 5/34 (log-based by default) with a fill
-between them, blind-zone rectangles tracked bar by bar, SMA 200 / EMA 20 / EMA 50, an optional
-anchored VWAP and crossover alerts.
-
-## Speed profile templates (for reading the panel)
-
-| Pattern | Speedometer |
-|---|---|
-| Impulse | main peak in the middle of wave 3; wave 4 returns to zero; wave 5 peak is lower |
-| Contracting diagonal | strongest peak in wave 1, then fading |
-| Expanding diagonal | every peak is higher than the previous one, no divergence |
-| Contracting / expanding triangle | the outline narrows / widens on both sides of zero |
-| Correction | noticeably slower than the preceding impulse |
-
-The wave you study should take 100-140 bars of the current timeframe. With fewer bars the
-speedometer shows a wave of higher degree. With more bars it splits the wave into lower degrees.
+- **Alerts** — `alertcondition` for sign changes and divergences, plus `alert()` messages with symbol,
+  timeframe, phase and values, sent on closed bars only.
 
 ## Verification
 
-An open reference implementation in Python (with tests on synthetic data) reproduces every
-value, so you can compare any bar against TradingView's Data Window.
+An open Python reference implementation reproduces speed, acceleration, phases, pivots, divergences
+and the 1-3-5 classification, with tests on synthetic data. You can compare any bar against
+TradingView's Data Window.
 
 ## Limitations
 
-- The indicator does not count waves. It only checks the speed profile of the points you enter.
-- Only four profiles are classified automatically. Triangles and corrections are read visually.
-- Higher-timeframe values lag by one higher-timeframe bar, by design.
+- The indicator does not count waves. It checks the speed profile of the points you enter.
+- Only three profiles are classified automatically (impulse and two diagonals). Triangles and
+  corrections are read visually.
+- Divergences lag by the pivot's right bars; higher-timeframe values lag by one higher-timeframe bar.
 
 ## Credits
 
-The method is based on the speedometer approach described at tradewaves.ru
-(https://tradewaves.ru/teoriya/macd/), Bill Williams' Awesome Oscillator (5/34) and research
-by pr0 / RSWA.
+The method is based on the speedometer approach at tradewaves.ru (https://tradewaves.ru/teoriya/macd/),
+Bill Williams' 5/34 oscillator ideas, and research by pr0 / RSWA.
 
 ## Disclaimer
 
-This script is for educational and analytical purposes only. It is not financial advice and
-not a recommendation to buy or sell any instrument. Past behaviour of an indicator does not
-predict future results. Trading involves risk of loss. You are solely responsible for your
-decisions.
+This script is for educational and analytical purposes only. It is not financial advice and not a
+recommendation to buy or sell any instrument. Past behaviour of an indicator does not predict future
+results. Trading involves risk of loss. You are solely responsible for your decisions.
