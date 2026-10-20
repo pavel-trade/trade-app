@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-Эталонная реализация «TW Спидометр Pro» (Python, только стандартная библиотека).
+Эталонная реализация «TW Спидометр — скорость + ускорение» и «TW Спидометр Pro»
+(Python, только стандартная библиотека).
 
-Повторяет вычисления из pine/tw_speedometer_pro.pine и pine/tw_blind_zone_pro.pine,
+Повторяет вычисления из pine/tw_speedometer.pine, pine/tw_speedometer_pro.pine
+и pine/tw_blind_zone_pro.pine,
 чтобы значения можно было сверить со значениями на TradingView:
 
   * EMA с seed = первое значение источника (формула pine_ema из справки Pine);
@@ -578,6 +580,105 @@ def analyze_wave(bars: list[Bar], series: dict, points: list, tf_sec: int | None
     return res
 
 
+
+# ---------------------------------------------------------------------------
+# «TW Спидометр — скорость + ускорение» (pine/tw_speedometer.pine)
+# скорость = линия MACD (series["macd"]), ускорение = гистограмма (series["hist"])
+# ---------------------------------------------------------------------------
+PHASES = ("рост ускоряется", "рост замедляется", "спад ускоряется", "спад замедляется")
+
+
+def phase4(speed: float, accel: float) -> str:
+    """Фаза по знаку скорости и знаку ускорения в направлении движения.
+
+    скорость >= 0: ускорение > 0 — «рост ускоряется», иначе «рост замедляется»;
+    скорость < 0:  ускорение < 0 — «спад ускоряется», иначе «спад замедляется».
+    """
+    if isna(speed) or isna(accel):
+        return "нет данных"
+    if speed >= 0:
+        return PHASES[0] if accel > 0 else PHASES[1]
+    return PHASES[2] if accel < 0 else PHASES[3]
+
+
+def percentile_linear(values, pct: float) -> float:
+    """Перцентиль с линейной интерполяцией между соседними рангами
+    (ранг = pct/100 * (n-1) по отсортированным значениям)."""
+    v = sorted(x for x in values if not isna(x))
+    if not v:
+        return NA
+    r = pct / 100.0 * (len(v) - 1)
+    lo = int(math.floor(r))
+    hi = min(lo + 1, len(v) - 1)
+    return v[lo] + (v[hi] - v[lo]) * (r - lo)
+
+
+def auto_scale(series: dict, n: int = 500, pct: float = 95.0, at: int | None = None) -> float:
+    """Множитель авто-масштаба: P(|скорость|) / P(|ускорение|) за последние n баров
+    до бара at включительно (по умолчанию — последний бар). NA, если баров меньше n."""
+    sp, ac = series["macd"], series["hist"]
+    at = len(sp) - 1 if at is None else at
+    if at + 1 < n:
+        return NA
+    a = percentile_linear([abs(x) for x in ac[at - n + 1:at + 1]], pct)
+    b = percentile_linear([abs(x) for x in sp[at - n + 1:at + 1]], pct)
+    return NA if isna(a) or isna(b) or a == 0 else b / a
+
+
+def crossings(src) -> list[tuple[int, int]]:
+    """Смены знака как ta.crossover/ta.crossunder(src, 0): (бар, +1 вверх / -1 вниз)."""
+    out = []
+    for i in range(1, len(src)):
+        a, b = src[i], src[i - 1]
+        if isna(a) or isna(b):
+            continue
+        if a > 0 and b <= 0:
+            out.append((i, 1))
+        elif a < 0 and b >= 0:
+            out.append((i, -1))
+    return out
+
+
+def peaks_135(bars: list[Bar], series: dict, points: list, k: float = 0.35) -> dict:
+    """Режим «Пики волн 1-3-5».
+
+    points — 6 индексов баров (None = не задано). Отрезок k = [точка k-1; точка k],
+    считается, если обе точки заданы. Для волн 1, 3, 5 берётся экстремум скорости
+    по направлению волны, для 2 и 4 — против. Бар экстремума — первый бар с этим значением.
+    Классификация — только если заданы все 6 точек.
+    """
+    sp = series["macd"]
+    if points[0] is None or points[1] is None:
+        return dict(active=False)
+    last = max(i for i, p in enumerate(points) if p is not None)
+    s = 1
+    if points[5] is not None:
+        s = 1 if bars[points[5]].c > bars[points[0]].c else -1
+    else:
+        s = 1 if bars[points[1]].c > bars[points[0]].c else -1
+    segs = []
+    for kseg in range(1, 6):
+        a, b = points[kseg - 1], points[kseg]
+        if a is None or b is None or b <= a:
+            segs.append(None)
+            continue
+        want_max = (kseg % 2 == 1) == (s == 1)
+        best, best_bar = NA, None
+        for j in range(a, b + 1):
+            v = sp[j]
+            if isna(v):
+                continue
+            if isna(best) or (v > best if want_max else v < best):
+                best, best_bar = v, j
+        segs.append(dict(wave=kseg, value=best, bar=best_bar))
+    res = dict(active=True, direction=s, segments=segs, last_point=last)
+    if all(sg is not None for sg in segs):
+        a1, a3, a5 = (s * segs[i]["value"] for i in (0, 2, 4))
+        res["profile"] = classify_profile(a1, a3, a5, segs[3]["value"], k)
+    else:
+        res["profile"] = None
+    return res
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -606,6 +707,7 @@ def main(argv=None) -> int:
     ap.add_argument("--zones", action="store_true", help="список слепых зон")
     ap.add_argument("--wave", help="6 дат через запятую (точки 0..5); пустые — не заданы")
     ap.add_argument("--k", type=float, default=0.35)
+    ap.add_argument("--scale", type=int, default=0, help="авто-масштаб ускорения за N последних баров")
     a = ap.parse_args(argv)
 
     bars = load_csv(a.csv)
@@ -627,11 +729,11 @@ def main(argv=None) -> int:
         t = _parse_time(a.at)
         rows += [i for i, b in enumerate(bars) if b.t == t] or [time_to_bar(bars, t, tfs)]
     if rows:
-        print(f"{'время (UTC)':17} {'close':>12} {'MACD':>10} {'сигн.':>10} {'гист.':>10} {'AO':>10}  фаза")
+        print(f"{'время (UTC)':17} {'close':>12} {'скорость':>10} {'сигн.':>10} {'ускор.':>10} {'AO':>10}  фаза")
         for i in rows:
             if i is None:
                 continue
-            ph = phase(sr["macd"][i], sr["macd"][i - 1] if i else NA)
+            ph = phase4(sr["macd"][i], sr["hist"][i])
             print(f"{_fmt_t(bars[i].t):17} {bars[i].c:12.4f} {_f(sr['macd'][i]):>10} "
                   f"{_f(sr['signal'][i]):>10} {_f(sr['hist'][i]):>10} {_f(sr['ao'][i]):>10}  {ph}")
 
@@ -651,6 +753,9 @@ def main(argv=None) -> int:
         if live:
             print(f"текущая: экстремум {_fmt_t(bars[live.ext_bar].t)} {live.ext_price:.4f}")
 
+    if a.scale:
+        print(f"Авто-масштаб ускорения (P95, {a.scale} баров): ×{_f(auto_scale(sr, a.scale), 3)}")
+
     if a.wave:
         parts = [p.strip() for p in a.wave.split(",")]
         parts += [""] * (6 - len(parts))
@@ -666,6 +771,13 @@ def main(argv=None) -> int:
                 print(f"  волна {sg['wave']}: баров {sg['bars']:4}, пик {_f(sg['peak'])}, "
                       f"объём/бар {_f(sg['vol_avg'], 0)}, к волне 3 {_f(sg['vol_to_3'], 2)}")
             print("  соотношения (лог):", {k2: _f(v, 3) for k2, v in r["ratios"].items()})
+        pk = peaks_135(bars, sr, pts, a.k)
+        if pk.get("active"):
+            for sg in pk["segments"]:
+                if sg:
+                    print(f"  пик скорости волны {sg['wave']}: {_f(sg['value'])} на {_fmt_t(bars[sg['bar']].t)}")
+            if pk["profile"]:
+                print("  профиль 1-3-5 (профиль скорости, не разметка):", pk["profile"])
     return 0
 
 
