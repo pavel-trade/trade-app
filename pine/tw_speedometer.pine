@@ -406,3 +406,115 @@ if barstate.islast and waveOn
             pkLabels.push(label.new(pt.get(4), 0.0, profileTxt + "\nпрофиль скорости, не разметка", xloc = xloc.bar_time,
                  color = color.new(C_TBL_BG, 0), textcolor = C_TX, size = size.small,
                  style = s == 1 ? label.style_label_up : label.style_label_down))
+
+// ============================================================================
+// 5. Таблица состояния и мультитаймфрейм
+// ============================================================================
+const string G7 = "7. Таблица и старшие ТФ"
+const string POS_TL = "Вверху слева"
+const string POS_TC = "Вверху по центру"
+const string POS_TR = "Вверху справа"
+const string POS_ML = "Посередине слева"
+const string POS_MR = "Посередине справа"
+const string POS_BL = "Внизу слева"
+const string POS_BC = "Внизу по центру"
+const string POS_BR = "Внизу справа"
+const string SZ_S = "Мелкий"
+const string SZ_M = "Средний"
+const string SZ_L = "Крупный"
+bool showTbl = input.bool(true, "Таблица состояния", group = G7)
+string tblPosIn = input.string(POS_TR, "Положение", options = [POS_TL, POS_TC, POS_TR, POS_ML, POS_MR, POS_BL, POS_BC, POS_BR], group = G7, inline = "tp")
+string tblSizeIn = input.string(SZ_M, "размер", options = [SZ_S, SZ_M, SZ_L], group = G7, inline = "tp")
+int peakWin = input.int(200, "Окно «от пика», баров", minval = 10, maxval = 5000, group = G7,
+     tooltip = "Текущая |скорость| в % от максимума |скорости| за это число баров.")
+bool showMtf = input.bool(true, "Старшие ТФ в таблице", group = G7,
+     tooltip = "Фаза и скорость на трёх ТФ. Значение берётся с последней закрытой свечи старшего ТФ (lookahead выключен, на истории — [1] старшего ТФ): без перерисовки, но с запаздыванием на одну свечу старшего ТФ.")
+string tf1 = input.timeframe("60", "ТФ 1", group = G7, inline = "tf")
+string tf2 = input.timeframe("240", "ТФ 2", group = G7, inline = "tf")
+string tf3 = input.timeframe("D", "ТФ 3", group = G7, inline = "tf")
+
+f_pos(string p) =>
+    switch p
+        POS_TL => position.top_left
+        POS_TC => position.top_center
+        POS_TR => position.top_right
+        POS_ML => position.middle_left
+        POS_MR => position.middle_right
+        POS_BL => position.bottom_left
+        POS_BC => position.bottom_center
+        => position.bottom_right
+
+string tblSize = tblSizeIn == SZ_S ? size.tiny : tblSizeIn == SZ_M ? size.small : size.normal
+
+float peakAbs = ta.highest(math.abs(speed), peakWin)
+float pctOfPeak = peakAbs > 0 ? math.abs(speed) / peakAbs * 100.0 : na
+
+// Защита от перерисовки (идиома руководства Pine): в выражении — [1] старшего ТФ в реальном времени,
+// снаружи — [1] текущего ТФ на истории. lookahead всегда выключен. Одна функция расчёта — f_speed.
+int idxH = barstate.isrealtime ? 1 : 0
+int idxC = barstate.isrealtime ? 0 : 1
+
+f_htf() =>
+    [s, a] = f_speed(useLog, fastLen, slowLen, sigLen)
+    [s[idxH], a[idxH]]
+
+// ровно три вызова request.security, на глобальном уровне, на каждом баре
+[r1s, r1a] = request.security(syminfo.tickerid, tf1, f_htf(), lookahead = barmerge.lookahead_off)
+[r2s, r2a] = request.security(syminfo.tickerid, tf2, f_htf(), lookahead = barmerge.lookahead_off)
+[r3s, r3a] = request.security(syminfo.tickerid, tf3, f_htf(), lookahead = barmerge.lookahead_off)
+float m1s = r1s[idxC]
+float m1a = r1a[idxC]
+float m2s = r2s[idxC]
+float m2a = r2a[idxC]
+float m3s = r3s[idxC]
+float m3a = r3a[idxC]
+
+var table stTbl = table.new(f_pos(tblPosIn), 3, 10, border_width = 1)
+
+f_cell(int c, int r, string txt, color tc, color bg) =>
+    table.cell(stTbl, c, r, txt, text_color = tc, bgcolor = bg, text_size = tblSize, text_halign = text.align_left)
+
+f_fmt(float v) =>
+    na(v) ? "—" : (v >= 0 ? "+" : "") + str.tostring(v, "0.000") + unitTxt
+
+f_mtfRow(int r, string tf, float s, float a) =>
+    bool lower = timeframe.in_seconds(tf) < timeframe.in_seconds()
+    int id = f_phaseId(s, a)
+    color tc = lower or id == 0 ? C_TX : id <= 2 ? C_UP : C_DN
+    f_cell(0, r, "ТФ " + (tf == "" ? timeframe.period : tf), C_TX, C_TBL_BG)
+    f_cell(1, r, lower ? "ТФ ниже графика" : f_phaseName(id), tc, C_TBL_BG)
+    f_cell(2, r, lower ? "—" : f_fmt(s), tc, C_TBL_BG)
+
+if barstate.islast and showTbl
+    table.clear(stTbl, 0, 0, 2, 9)
+    color phc = phaseId == 0 ? C_TX : phaseId <= 2 ? C_UP : C_DN
+    f_cell(0, 0, "TW Спидометр " + str.tostring(fastLen) + "/" + str.tostring(slowLen) + "/" + str.tostring(sigLen), C_TX, C_TBL_HD)
+    f_cell(1, 0, "", C_TX, C_TBL_HD)
+    f_cell(2, 0, timeframe.period, C_TX, C_TBL_HD)
+    f_cell(0, 1, "Фаза", C_TX, C_TBL_BG)
+    f_cell(1, 1, f_phaseName(phaseId), phc, C_TBL_BG)
+    f_cell(2, 1, phaseId == 1 or phaseId == 3 ? "ярко" : "бледно", phc, C_TBL_BG)
+    f_cell(0, 2, "Скорость", C_TX, C_TBL_BG)
+    f_cell(1, 2, f_fmt(speed), phc, C_TBL_BG)
+    f_cell(2, 2, "EMA " + str.tostring(fastLen) + " - EMA " + str.tostring(slowLen), C_TX, C_TBL_BG)
+    f_cell(0, 3, "Ускорение", C_TX, C_TBL_BG)
+    f_cell(1, 3, f_fmt(accel), accel > 0 ? C_UP : C_DN, C_TBL_BG)
+    f_cell(2, 3, "скорость - EMA " + str.tostring(sigLen), C_TX, C_TBL_BG)
+    f_cell(0, 4, "От пика", C_TX, C_TBL_BG)
+    f_cell(1, 4, na(pctOfPeak) ? "—" : str.tostring(pctOfPeak, "0") + " %", C_TX, C_TBL_BG)
+    f_cell(2, 4, "max |скорости| за " + str.tostring(peakWin) + " бар.", C_TX, C_TBL_BG)
+    int row = 5
+    if showMtf
+        f_mtfRow(row, tf1, m1s, m1a)
+        f_mtfRow(row + 1, tf2, m2s, m2a)
+        f_mtfRow(row + 2, tf3, m3s, m3a)
+        row += 3
+    if profileTxt != ""
+        f_cell(0, row, "Профиль 1-3-5", C_TX, C_TBL_BG)
+        f_cell(1, row, profileTxt, C_TX, C_TBL_BG)
+        f_cell(2, row, "профиль скорости, не разметка", C_TX, C_TBL_BG)
+        row += 1
+    if accModeIn == A_AUTO
+        f_cell(0, row, "Масштаб ускорения", C_TX, C_TBL_BG)
+        f_cell(1, row, "x" + str.tostring(na(autoMult) ? accMult : autoMult, "0.0#"), C_ACC, C_TBL_BG)
+        f_cell(2, row, na(autoMult) ? "мало истории, фикс." : "P" + str.tostring(autoPct, "0") + " за " + str.tostring(autoLen) + " бар.", C_TX, C_TBL_BG)
