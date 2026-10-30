@@ -2438,7 +2438,7 @@ function renderAccounts(){
   if(wOn) $('walletBox').innerHTML=`<div class="acrow wallet"><div class="acn"><b>Криптокошелёк</b><span class="hint">отсюда деньги ушли на счета</span></div>
     <div class="ack"><span>Было</span><b>${fmt(capStart,2)}</b><em class="rb">${rub(capStart)}</em></div>
     <div class="ack"><span>Сейчас</span><b>${fmt(pnum(W.now),2)}</b><em class="rb">${rub(pnum(W.now))}</em></div>
-    <div class="ack"><span>Ушло на счета</span><b>${fmt(capStart-pnum(W.now),2)}</b><em class="rb">${rub(capStart-pnum(W.now))}</em></div>
+    <div class="ack"><span>Ушло с кошелька</span><b>${fmt(capStart-pnum(W.now),2)}</b><em class="rb">${pnum(W.fees)>0?`комиссии −${fmt(pnum(W.fees),2)} · дошло ${fmt(capStart-pnum(W.now)-pnum(W.fees),2)}`:rub(capStart-pnum(W.now))}</em></div>
     <div class="ack"><span>Весь капитал</span><b>${fmt(capNow,2)}</b><em class="rb">${rub(capNow)}</em></div>
     <div class="ack"><span>Итог капитала</span><b class="${capNow-capStart>0?'pos':capNow<capStart?'neg':''}">${sgn(capNow-capStart)} <small>${sgn((capNow-capStart)/capStart*100,1)}%</small></b><em class="rb">${rub(capNow-capStart,true)}</em></div><div class="acb"><button type="button" class="link" id="walletEdit">Изменить</button></div></div>`;
   $('accList').innerHTML = (multi?'':'<p class="hint" style="margin:0 0 10px">Сейчас у вас один счёт. Добавьте второй, например отдельно Bitget и FxPro: у каждого будет свой депозит, плюс и минус, а сверху — общая сумма.</p>') +
@@ -2484,17 +2484,18 @@ $('fAcct').addEventListener('input',()=>{ S.animRows=true; renderTrades(); });
 $('walletBox').addEventListener('click',e=>{ if(!e.target.closest('#walletEdit')) return; const W=S.profile.wallet||{};
   const was=prompt('Криптокошелёк: сколько было изначально, $', W.start??''); if(was==null) return;
   const now=prompt('Криптокошелёк: сколько сейчас, $', W.now??''); if(now==null) return;
-  if(isFinite(pnum(was)) && isFinite(pnum(now))){ S.profile.wallet={start:pnum(was), now:pnum(now)}; saveProfile(); } });
+  const fees=prompt('Комиссии за переводы с кошелька на биржи, всего $', W.fees??0); if(fees==null) return;
+  if(isFinite(pnum(was)) && isFinite(pnum(now))){ S.profile.wallet={start:pnum(was), now:pnum(now), fees:pnum(fees)||0}; saveProfile(); } });
 $('accList').addEventListener('change',e=>{ if(e.target.id==='accSplit'){ S.profile.split=e.target.checked; saveProfile(); } });
 /* быстрая настройка счетов по ссылке: ?acc=FxPro:703.5,OKX:703.5&split=1 — после входа и первой синхронизации */
 function applyAccLink(){
   const q=new URLSearchParams(location.search), spec=q.get('acc'); if(!spec || !S.lastSync || applyAccLink.done) return;
   applyAccLink.done=true;
   const list=spec.split(',').map(x=>{ const p=x.split(':'); return {name:decodeURIComponent(p[0]).trim(), start:pnum(p[1]), now: p.length>2 ? pnum(p[2]) : null}; }).filter(x=>x.name && x.start>=0);
-  const wq=(q.get('wallet')||'').split(':'), wallet = wq.length===2 && isFinite(pnum(wq[0])) && isFinite(pnum(wq[1])) ? {start:pnum(wq[0]), now:pnum(wq[1])} : null;
+  const wq=(q.get('wallet')||'').split(':'), wallet = wq.length>=2 && isFinite(pnum(wq[0])) && isFinite(pnum(wq[1])) ? {start:pnum(wq[0]), now:pnum(wq[1]), fees: wq.length>2&&isFinite(pnum(wq[2]))?pnum(wq[2]):0} : null;
   history.replaceState(null,'',location.pathname+location.hash);
   if(!list.length) return;
-  if(!confirm('Настроить счета: '+list.map(x=>x.name+' — вложено '+fmt(x.start,2)+(isFinite(x.now)&&x.now!=null?', сейчас '+fmt(x.now,2):'')).join('; ')+(wallet?'; криптокошелёк: было '+fmt(wallet.start,2)+', сейчас '+fmt(wallet.now,2):'')+(q.get('split')==='1'?'; результат сделок делится поровну':'')+'?\nСделки в дневнике не изменятся.')) return;
+  if(!confirm('Настроить счета: '+list.map(x=>x.name+' — вложено '+fmt(x.start,2)+(isFinite(x.now)&&x.now!=null?', сейчас '+fmt(x.now,2):'')).join('; ')+(wallet?'; криптокошелёк: было '+fmt(wallet.start,2)+', сейчас '+fmt(wallet.now,2)+(wallet.fees?', комиссии за переводы '+fmt(wallet.fees,2):''):'')+(q.get('split')==='1'?'; результат сделок делится поровну':'')+'?\nСделки в дневнике не изменятся.')) return;
   const old=accts();
   S.profile.accounts=list.map((x,i)=>({id: old[i]?old[i].id:'a'+Date.now().toString(36)+i, name:x.name, start:x.start, now: x.now!=null&&isFinite(x.now)?x.now:null}));
   S.profile.split = q.get('split')==='1';
