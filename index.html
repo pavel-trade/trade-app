@@ -1347,6 +1347,8 @@ const S = { tab:null, profile:{startDeposit:1000}, trades:[], deleted:{}, lastBa
 let dirtySeq=0;
 function markDirty(id){ S.dirty[id]=++dirtySeq; }
 function hasManual(){ const A=S.profile.accounts; return Array.isArray(A) && A.some(a=>a.now!=null && a.now!=='' && isFinite(pnum(a.now))); }
+/* стартовая точка для статистики: если балансы счетов вписаны по биржам, кривая и проценты подгоняются так, чтобы закончиться на текущей сумме денег */
+function statStart(){ const st=pnum(S.profile.startDeposit)||0; if(!hasManual()) return st; return balance() - (ledger(0, S.trades).balance); }
 function balance(){ if(hasManual()) return S.profile.accounts.reduce((s,a)=>s+acctStats(a).bal,0); return ledger(pnum(S.profile.startDeposit)||0, S.trades).balance; }
 /* рубли: курс USD→RUB из тех же курсов валют, что и для кроссов */
 function rubRate(){ try{ const r=FX_RATES&&FX_RATES.r&&+FX_RATES.r.RUB; return r>0?r:NaN; }catch(e){ return NaN; } }
@@ -1819,7 +1821,7 @@ function newTrade(o={}){
 const STATUS = {draft:['Черновик','info'], open:['Открыта','info'], partial:['Частично','mid'], closed:['Закрыта','ok']};
 
 function renderDiaryStats(){
-  const start=pnum(S.profile.startDeposit)||0, L=ledger(start,S.trades), bal=L.balance, pnl=L.trading, base=start+Math.max(0,L.netCash);
+  const start=statStart(), L=ledger(start,S.trades), bal=L.balance, pnl=L.trading, base=start+Math.max(0,L.netCash);
   const calcs=S.trades.map(t=>({t,c:tradeCalc(t)}));
   const closed=calcs.filter(x=>x.c.status==='closed');
   const wins=closed.filter(x=>x.c.net>0), losses=closed.filter(x=>x.c.net<=0);
@@ -1880,7 +1882,7 @@ $('bkBy').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!
 /* ---------- equity chart ---------- */
 const EQ={N:96, ys:null, W:0, H:0, raf:0, cur:null};
 function eqData(){
-  const start=pnum(S.profile.startDeposit)||0;
+  const start=statStart();
   let pts=ledger(start,S.trades).pts;
   if(S.eqRange!=='all'){
     const c=new Date(); c.setDate(c.getDate()-(+S.eqRange)); const cut=isoDate(c);
@@ -2221,7 +2223,7 @@ function renderSlices(cs){
 $('sliceBy').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; S.slice=b.dataset.s; $('sliceBy').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); renderSlices(); });
 $('awards').addEventListener('click',e=>{ const b=e.target.closest('[data-open]'); if(!b) return; setTab('diary'); openTrade(b.dataset.open); });
 function dailyPnl(){
-  const L=ledger(pnum(S.profile.startDeposit)||0, S.trades), m=new Map();
+  const L=ledger(statStart(), S.trades), m=new Map();
   (L.ev||[]).forEach(e=>{ if(!e.d || e.cash) return; m.set(e.d,(m.get(e.d)||0)+e.v); });
   return m;
 }
@@ -2249,7 +2251,7 @@ function weekRange(off=0){ const d=new Date(); const wd=(d.getDay()+6)%7; const 
   const e=new Date(b.getFullYear(), b.getMonth(), b.getDate()-1); return {from:isoDate(a), to:isoDate(b), label:`${a.getDate()} ${MONTHS_G[a.getMonth()]} — ${e.getDate()} ${MONTHS_G[e.getMonth()]}`, short:`${a.getDate()}–${e.getDate()} ${MONTHS_G[e.getMonth()]}`}; }
 const MONTHS_G=['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
 function periodStats(from,to){
-  const start=pnum(S.profile.startDeposit)||0, L=ledger(start,S.trades);
+  const start=statStart(), L=ledger(start,S.trades);
   let bal0=start; L.pts.forEach((p,i)=>{ if(i>0 && p.d && p.d<from) bal0=p.bal; });
   const inR=d=>(!from || d>=from) && (!to || d<to);
   let run=bal0, dep=0; const pts=[{d:from,bal:bal0}];
@@ -2893,7 +2895,7 @@ function renderLegs(added){
 }
 function renderEdSum(){
   fxSyncDraft(S.draft);
-  const d=S.draft, c=tradeCalc(d), pd=priceDec(c.avg), start=pnum(S.profile.startDeposit)||0;
+  const d=S.draft, c=tradeCalc(d), pd=priceDec(c.avg), start=statStart();
   // депозит на момент открытия этой сделки: сделки, открытые раньше, и пополнения/выводы до этой даты
   const tkey=t=>(t.date||'')+' '+(t.time||'')+' '+String(t.createdAt||0).padStart(15,'0');
   const myKey=tkey(d), before=S.trades.filter(t=>t.id!==d.id && tkey(t)<myKey);
