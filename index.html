@@ -449,6 +449,8 @@ button{font:inherit}
 .acb{display:flex;gap:8px;align-items:center;justify-content:flex-end}
 @media (max-width:760px){ .acrow{grid-template-columns:repeat(2,minmax(0,1fr))} .acn{grid-column:1/-1} .acb{grid-column:1/-1;justify-content:flex-start} .accform{grid-template-columns:1fr 1fr} }
 /* ---- живые цены ---- */
+.ack em.rb{font-style:normal;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.acrow.wallet{margin-bottom:8px;background:var(--accent-soft)}
 .accsplit{display:flex;gap:8px;align-items:center;font-size:13.5px;color:var(--muted);padding:4px 2px}
 .exview{grid-column:1/-1;background:var(--panel-2);padding:10px 14px;font-size:12.5px;color:var(--muted);line-height:1.5}
 .exview b{color:var(--ink);font-weight:600} .exview span{font-family:var(--f-mono);font-weight:600}
@@ -911,7 +913,9 @@ table.cmp .sh{display:none}
           <div class="inp"><input id="accStart" inputmode="decimal" placeholder="Стартовый депозит" aria-label="Стартовый депозит"><span>USDT</span></div>
           <button type="button" class="btn sm" id="accSave">Добавить</button><button type="button" class="btn sm ghost" id="accCancel">Отмена</button>
         </div>
+        <div id="walletBox" hidden></div>
         <div id="accList"></div>
+        <p class="hint" id="rubNote" style="margin:8px 2px 0"></p>
       </div>
 
       <details class="review cashbox stag" style="--i:1" id="cashBox">
@@ -1342,7 +1346,11 @@ const S = { tab:null, profile:{startDeposit:1000}, trades:[], deleted:{}, lastBa
             levPick:null, animRows:true, bk:'category', eqRange:'all', dirty:{}, profileDirty:false, lastSync:0 };
 let dirtySeq=0;
 function markDirty(id){ S.dirty[id]=++dirtySeq; }
-function balance(){ return ledger(pnum(S.profile.startDeposit)||0, S.trades).balance; }
+function hasManual(){ const A=S.profile.accounts; return Array.isArray(A) && A.some(a=>a.now!=null && a.now!=='' && isFinite(pnum(a.now))); }
+function balance(){ if(hasManual()) return S.profile.accounts.reduce((s,a)=>s+acctStats(a).bal,0); return ledger(pnum(S.profile.startDeposit)||0, S.trades).balance; }
+/* рубли: курс USD→RUB из тех же курсов валют, что и для кроссов */
+function rubRate(){ try{ const r=FX_RATES&&FX_RATES.r&&+FX_RATES.r.RUB; return r>0?r:NaN; }catch(e){ return NaN; } }
+function rub(x, signed){ const r=rubRate(); if(!isFinite(r)||!isFinite(x)) return ''; const v=x*r; return (signed&&v>0?'+':v<0?'−':'')+fmt(Math.abs(v),0)+' ₽'; }
 /* =================== счета: у каждого свой стартовый депозит, общий депозит = сумма счетов =================== */
 function accts(){
   const P=S.profile; if(!Array.isArray(P.accounts) || !P.accounts.length) P.accounts=[{id:'main', name:'Основной счёт', start:pnum(P.startDeposit)||0}];
@@ -1361,6 +1369,12 @@ function acctOf(t){   // счёт сделки: явно указанный, и�
 function cashAcct(m){ return acctById(m.account) || accts()[0]; }
 function acctStats(a){
   const A=accts();
+  if(a.now!=null && a.now!=='' && isFinite(pnum(a.now))){   // баланс вписан вручную по данным биржи
+    const tr=S.trades.filter(t=>acctOf(t).id===a.id), start=pnum(a.start)||0, bal=pnum(a.now);
+    let fl=0, nOpen=0, nf=0, margin=0;
+    tr.forEach(t=>{ const c=tradeCalc(t); if(c.status==='open'||c.status==='partial'){ nOpen++; margin+=c.marginTot*(1-Math.min(c.closedPct,100)/100); const f=(typeof floating==='function')?floating(t,c):null; if(f){ fl+=f.pnl; nf++; } } });
+    return {start, bal, pnl:bal-start, n:tr.length, nOpen, fl, nf, margin, manual:true, cash:cashList().filter(m=>cashAcct(m).id===a.id).reduce((s,m)=>s+pnum(m.amount),0)};
+  }
   if(S.profile.split && A.length>1){   // режим «поровну»: результат всех сделок делится между счетами одинаково
     const N=A.length, all=ledger(0, S.trades, []), start=pnum(a.start)||0, pnl=all.balance/N;
     let fl=0, nOpen=0, nf=0, margin=0;
@@ -1529,7 +1543,7 @@ function rateFor(pair){
 async function loadRates(){
   if(FX_RATES && Date.now()-FX_RATES.t < 12*3600e3) return;
   try{ const j=await fetch('https://open.er-api.com/v6/latest/USD').then(r=>r.json());
-    if(j && j.result==='success' && j.rates){ FX_RATES={t:Date.now(), r:j.rates}; lsSet('poscalc.rates',FX_RATES);
+    if(j && j.result==='success' && j.rates){ FX_RATES={t:Date.now(), r:j.rates}; lsSet('poscalc.rates',FX_RATES); setTimeout(()=>{ try{ renderAll({}); }catch(e){} },0);
       if(['1','wait'].includes($('fxRate').dataset.auto) && RATE_PAIR){ const v=rateFor(RATE_PAIR); if(v){ $('fxRate').value=v; $('fxRate').dataset.auto='1'; renderCalc(); } } } }catch(e){}
 }
 $('fxRate').addEventListener('input',()=>{ $('fxRate').dataset.auto='0'; });
@@ -1640,7 +1654,7 @@ function renderCalc(){
     if(!c.fx && isFinite(mg) && mg>0){ const sl=c.qty*Math.abs(c.E-c.S), tp=c.tpValid&&!c.multi ? c.qty*Math.abs(c.T-c.E) : NaN, fee=c.notional*(c.feePct||0)/100;
       ev.hidden=false; ev.innerHTML=`<b>Как покажет биржа</b> (без комиссий, % от маржи ${fmt(mg,2)} при x${fmt(L,0)}): `+
         `стоп <span class="neg">${sgn(-sl)} (${sgn(-sl/mg*100,2)}%)</span>`+(isFinite(tp)?` · тейк <span class="pos">${sgn(tp)} (${sgn(tp/mg*100,2)}%)</span>`:'')+
-        ` · комиссия за вход ≈ ${fmt(fee,2)}`; }
+        ` · комиссия за вход ≈ ${fmt(fee,2)}`+(isFinite(rubRate())?` · в рублях: риск ${rub(-c.riskUsd,true)}${c.tpValid?`, прибыль ${rub(c.profitUsd,true)}`:''}`:''); }
     else ev.hidden=true; }
   { const w=c.stopPct>30; $('c-stop-s').classList.toggle('neg',w); if(w) setTimeout(()=>{ $('c-stop-s').textContent='Стоп дальше 30% от входа — проверьте, нет ли опечатки'; },0); }
   tween($('c-risk'), c.riskUsd, x=>'−'+fmt(x,2)); setText('c-risk-s', CUR+' · '+fmt(c.r,2)+'% депо'+(c.manualQty&&Math.abs(c.r-c.rPlan)>0.005?' (план '+fmt(c.rPlan,2)+'%)':''));
@@ -1804,7 +1818,9 @@ function renderDiaryStats(){
   $('startDep').readOnly = accts().length>1; $('startDep').title = accts().length>1 ? 'Сумма стартовых депозитов всех счетов. Меняйте депозит конкретного счёта в блоке «Счета».' : '';
   if(document.activeElement!==$('startDep')) $('startDep').value = +(+S.profile.startDeposit).toFixed(2);
   { const cs=cashList().filter(m=>m.inStart).reduce((a,m)=>a+pnum(m.amount),0); $('startDepS').textContent = Math.abs(cs)>1e-9 ? `USDT · из них пополнения и выводы ${sgn(cs)}` : 'USDT'; }
-  tween($('d-bal'), bal, x=>fmt(x,2)); $('d-bal-s').textContent=`торговля ${sgn(pnl)} · ${base>0?sgn(pnl/base*100,1)+'%':'—'}${L.netCash?` · ${L.netCash>0?'пополнения':'выводы'} ${sgn(L.netCash,0)}`:''}`; signCls($('d-bal-s'), pnl);
+  if(hasManual()){ const B=balance(), st0=pnum(S.profile.startDeposit)||0;
+    tween($('d-bal'), B, x=>fmt(x,2)); $('d-bal-s').textContent=`по счетам · итог ${sgn(B-st0)} · ${st0>0?sgn((B-st0)/st0*100,1)+'%':''} · ${rub(B-st0,true)}`; signCls($('d-bal-s'), B-st0);
+  } else { tween($('d-bal'), bal, x=>fmt(x,2)); $('d-bal-s').textContent=`торговля ${sgn(pnl)} · ${base>0?sgn(pnl/base*100,1)+'%':'—'}${L.netCash?` · ${L.netCash>0?'пополнения':'выводы'} ${sgn(L.netCash,0)}`:''}${rub(pnl,true)?' · '+rub(pnl,true):''}`; signCls($('d-bal-s'), pnl); }
   tween($('d-cnt'), closed.length, x=>String(Math.round(x))); $('d-cnt-s').textContent=`всего записей: ${S.trades.length}`;
   tween($('d-wr'), closed.length?wins.length/closed.length*100:NaN, x=>fmt(x,0)+'%'); $('d-wr-s').textContent=`${wins.length} из ${closed.length} закрытых`;
   $('d-pf').textContent = pf===Infinity?'∞':fmt(pf,2); $('d-pf-s').textContent=`в среднем ${isFinite(avgR)?sgn(avgR)+'R':'—'} на сделку`;
@@ -1813,8 +1829,9 @@ function renderDiaryStats(){
   tween($('d-loss'), sumL, x=>x>0.004?'−'+fmt(x,2):'0,00');
   tween($('d-fee'), fees, x=>x>0.004?'−'+fmt(x,2):'0,00'); $('d-fee-s').textContent = funding ? `фандинг ${sgn(funding)} USDT` : 'USDT уплачено';
 
-  tween($('hdrBal'), bal, x=>fmt(x,2));
-  const hc=$('hdrChg'); hc.textContent = base>0 && Math.abs(pnl)>0.004 ? sgn(pnl/base*100,1)+'%' : ''; signCls(hc,pnl);
+  { const HB = hasManual() ? balance() : bal, hp = HB-(pnum(S.profile.startDeposit)||0); tween($('hdrBal'), HB, x=>fmt(x,2)); $('hdrBal').parentNode.title = 'Текущий депозит'+(rub(HB)?' ≈ '+rub(HB):''); }
+  { const hc=$('hdrChg'), P = hasManual() ? balance()-(pnum(S.profile.startDeposit)||0) : pnl, Bs = hasManual() ? (pnum(S.profile.startDeposit)||0) : base;
+    hc.textContent = Bs>0 && Math.abs(P)>0.004 ? sgn(P/Bs*100,1)+'%' : ''; signCls(hc,P); }
   renderCash(); renderAccounts();
 
   const dd=maxDrawdown(L.pts);
@@ -2415,20 +2432,30 @@ let accEdit=null;
 function renderAccounts(){
   const A=accts(), multi=A.length>1, box=$('accBox');
   const tot=A.reduce((s,a)=>s+Math.max(0,acctStats(a).bal),0);
+  const W=S.profile.wallet, wOn=W && isFinite(pnum(W.start)) && isFinite(pnum(W.now));
+  const capNow = wOn ? pnum(W.now)+balance() : NaN, capStart = wOn ? pnum(W.start) : NaN;
+  $('walletBox').hidden=!wOn;
+  if(wOn) $('walletBox').innerHTML=`<div class="acrow wallet"><div class="acn"><b>Криптокошелёк</b><span class="hint">отсюда деньги ушли на счета</span></div>
+    <div class="ack"><span>Было</span><b>${fmt(capStart,2)}</b><em class="rb">${rub(capStart)}</em></div>
+    <div class="ack"><span>Сейчас</span><b>${fmt(pnum(W.now),2)}</b><em class="rb">${rub(pnum(W.now))}</em></div>
+    <div class="ack"><span>Ушло на счета</span><b>${fmt(capStart-pnum(W.now),2)}</b><em class="rb">${rub(capStart-pnum(W.now))}</em></div>
+    <div class="ack"><span>Весь капитал</span><b>${fmt(capNow,2)}</b><em class="rb">${rub(capNow)}</em></div>
+    <div class="ack"><span>Итог капитала</span><b class="${capNow-capStart>0?'pos':capNow<capStart?'neg':''}">${sgn(capNow-capStart)} <small>${sgn((capNow-capStart)/capStart*100,1)}%</small></b><em class="rb">${rub(capNow-capStart,true)}</em></div><div class="acb"><button type="button" class="link" id="walletEdit">Изменить</button></div></div>`;
   $('accList').innerHTML = (multi?'':'<p class="hint" style="margin:0 0 10px">Сейчас у вас один счёт. Добавьте второй, например отдельно Bitget и FxPro: у каждого будет свой депозит, плюс и минус, а сверху — общая сумма.</p>') +
    `<div class="acctbl">`+A.map(a=>{ const st=acctStats(a), share=tot>0?Math.max(0,st.bal)/tot*100:0, ed=accEdit===a.id;
     return `<div class="acrow" data-acc="${esc(a.id)}">
-      <div class="acn">${ed?`<input class="acname" value="${esc(a.name)}" aria-label="Название счёта">`:`<b>${esc(a.name)}</b>`}<span class="hint">${st.split?`1/${A.length} результата всех сделок`:`${st.n} ${plural(st.n,'сделка','сделки','сделок')}`}${st.nOpen?` · открыто ${st.nOpen}`:''}</span></div>
+      <div class="acn">${ed?`<input class="acname" value="${esc(a.name)}" aria-label="Название счёта">`:`<b>${esc(a.name)}</b>`}<span class="hint">${st.manual?'баланс по бирже':st.split?`1/${A.length} результата всех сделок`:`${st.n} ${plural(st.n,'сделка','сделки','сделок')}`}${st.nOpen?` · открыто ${st.nOpen}`:''}</span></div>
       <div class="ack"><span>Старт</span>${ed?`<input class="acstart" inputmode="decimal" value="${+(+st.start).toFixed(2)}" aria-label="Стартовый депозит">`:`<b>${fmt(st.start,2)}</b>`}</div>
-      <div class="ack"><span>Результат</span><b class="${st.pnl>0?'pos':st.pnl<0?'neg':''}">${sgn(st.pnl)}${st.start>0?` <small>${sgn(st.pnl/st.start*100,1)}%</small>`:''}</b></div>
-      <div class="ack"><span>Сейчас на счёте</span><b>${fmt(st.bal,2)}</b></div>
+      <div class="ack"><span>Результат</span><b class="${st.pnl>0?'pos':st.pnl<0?'neg':''}">${sgn(st.pnl)}${st.start>0?` <small>${sgn(st.pnl/st.start*100,1)}%</small>`:''}</b><em class="rb">${rub(st.pnl,true)}</em></div>
+      <div class="ack"><span>Сейчас на счёте</span>${ed?`<input class="acnow" inputmode="decimal" value="${a.now!=null&&a.now!==''?a.now:''}" placeholder="по сделкам" aria-label="Сейчас на счёте">`:`<b>${fmt(st.bal,2)}</b><em class="rb">${rub(st.bal)}</em>`}</div>
       <div class="ack"><span>Открытые</span><b class="${st.fl>0?'pos':st.fl<0?'neg':''}" data-acf="${esc(a.id)}">${st.nOpen ? (st.nf? sgn(st.fl) : '…') : '—'}</b></div>
       <div class="ack share"><span>Доля</span><b>${fmt(share,0)}%</b><i><em style="width:${share.toFixed(1)}%"></em></i></div>
       <div class="acb">${ed?`<button type="button" class="btn sm" data-accok>Готово</button>${A.length>1&&!st.n&&!st.cash?`<button type="button" class="link neg" data-accdel>Удалить</button>`:''}`:`<button type="button" class="link" data-accedit>Изменить</button>`}</div>
-    </div>`; }).join('')+(multi?`<label class="chk accsplit"><input type="checkbox" id="accSplit" ${S.profile.split?'checked':''}> Делить результат всех сделок поровну между счетами</label>`:'')+(multi?`<div class="acrow total"><div class="acn"><b>Всего</b></div><div class="ack"><span>Старт</span><b>${fmt(S.profile.startDeposit,2)}</b></div><div class="ack"><span>Результат</span><b class="${balance()-S.profile.startDeposit>0?'pos':'neg'}">${sgn(balance()-S.profile.startDeposit)}</b></div><div class="ack"><span>Сейчас</span><b>${fmt(balance(),2)}</b></div><div class="ack"><span>Открытые</span><b data-acf="__all">—</b></div><div class="ack"></div><div></div></div>`:'')+`</div>`;
+    </div>`; }).join('')+(multi?`<label class="chk accsplit"><input type="checkbox" id="accSplit" ${S.profile.split?'checked':''}> Делить результат всех сделок поровну между счетами</label>`:'')+(multi?`<div class="acrow total"><div class="acn"><b>Всего</b></div><div class="ack"><span>Вложено</span><b>${fmt(S.profile.startDeposit,2)}</b><em class="rb">${rub(S.profile.startDeposit)}</em></div><div class="ack"><span>Результат</span><b class="${balance()-S.profile.startDeposit>0?'pos':'neg'}">${sgn(balance()-S.profile.startDeposit)} <small>${S.profile.startDeposit>0?sgn((balance()-S.profile.startDeposit)/S.profile.startDeposit*100,1)+'%':''}</small></b><em class="rb">${rub(balance()-S.profile.startDeposit,true)}</em></div><div class="ack"><span>Сейчас</span><b>${fmt(balance(),2)}</b><em class="rb">${rub(balance())}</em></div><div class="ack"><span>Открытые</span><b data-acf="__all">—</b></div><div class="ack"></div><div></div></div>`:'')+`</div>`;
   // фильтры и выпадающие списки счетов
   const fa=$('fAcct'), fv=fa.value; fa.hidden=!multi; fa.innerHTML='<option value="">Все счета</option>'+acctOptions(fv); fa.value=acctById(fv)?fv:'';
   const ca=$('cashAcct'), cv=ca.value; ca.hidden=!multi; ca.parentNode.classList.toggle('multi',multi); ca.innerHTML=acctOptions(cv); if(!acctById(cv)) ca.value=A[0].id;
+  $('rubNote').textContent = isFinite(rubRate()) ? `Рубли по курсу ${fmt(rubRate(),2)} ₽ за $, курс обновляется раз в сутки.` : '';
   paintAccLive(); setTimeout(applyAccLink,0);
 }
 function paintAccLive(){
@@ -2450,22 +2477,28 @@ $('accList').addEventListener('click',e=>{
   const row=e.target.closest('[data-acc]'); if(!row) return; const a=acctById(row.dataset.acc); if(!a) return;
   if(e.target.closest('[data-accedit]')){ accEdit=a.id; renderAccounts(); const i=row.parentNode.querySelector(`[data-acc="${CSS.escape(a.id)}"] .acname`); if(i) i.focus(); return; }
   if(e.target.closest('[data-accok]')){ const r=document.querySelector(`[data-acc="${CSS.escape(a.id)}"]`), n=r.querySelector('.acname').value.trim(), v=pnum(r.querySelector('.acstart').value);
-    if(n) a.name=n; if(v>=0) a.start=v; accEdit=null; saveProfile(); return; }
+    if(n) a.name=n; if(v>=0) a.start=v; const nw=r.querySelector('.acnow'); if(nw){ const x=String(nw.value).trim(); a.now = x==='' ? null : (isFinite(pnum(x))?pnum(x):a.now); } accEdit=null; saveProfile(); return; }
   if(e.target.closest('[data-accdel]')){ S.profile.accounts=accts().filter(x=>x.id!==a.id); accEdit=null; saveProfile(); }
 });
 $('fAcct').addEventListener('input',()=>{ S.animRows=true; renderTrades(); });
+$('walletBox').addEventListener('click',e=>{ if(!e.target.closest('#walletEdit')) return; const W=S.profile.wallet||{};
+  const was=prompt('Криптокошелёк: сколько было изначально, $', W.start??''); if(was==null) return;
+  const now=prompt('Криптокошелёк: сколько сейчас, $', W.now??''); if(now==null) return;
+  if(isFinite(pnum(was)) && isFinite(pnum(now))){ S.profile.wallet={start:pnum(was), now:pnum(now)}; saveProfile(); } });
 $('accList').addEventListener('change',e=>{ if(e.target.id==='accSplit'){ S.profile.split=e.target.checked; saveProfile(); } });
 /* быстрая настройка счетов по ссылке: ?acc=FxPro:703.5,OKX:703.5&split=1 — после входа и первой синхронизации */
 function applyAccLink(){
   const q=new URLSearchParams(location.search), spec=q.get('acc'); if(!spec || !S.lastSync || applyAccLink.done) return;
   applyAccLink.done=true;
-  const list=spec.split(',').map(x=>{ const i=x.lastIndexOf(':'); return {name:decodeURIComponent(x.slice(0,i)).trim(), start:pnum(x.slice(i+1))}; }).filter(x=>x.name && x.start>=0);
+  const list=spec.split(',').map(x=>{ const p=x.split(':'); return {name:decodeURIComponent(p[0]).trim(), start:pnum(p[1]), now: p.length>2 ? pnum(p[2]) : null}; }).filter(x=>x.name && x.start>=0);
+  const wq=(q.get('wallet')||'').split(':'), wallet = wq.length===2 && isFinite(pnum(wq[0])) && isFinite(pnum(wq[1])) ? {start:pnum(wq[0]), now:pnum(wq[1])} : null;
   history.replaceState(null,'',location.pathname+location.hash);
   if(!list.length) return;
-  if(!confirm('Настроить счета: '+list.map(x=>x.name+' — старт '+fmt(x.start,2)).join(', ')+(q.get('split')==='1'?'; результат сделок делится поровну':'')+'?\nСделки в дневнике не изменятся.')) return;
+  if(!confirm('Настроить счета: '+list.map(x=>x.name+' — вложено '+fmt(x.start,2)+(isFinite(x.now)&&x.now!=null?', сейчас '+fmt(x.now,2):'')).join('; ')+(wallet?'; криптокошелёк: было '+fmt(wallet.start,2)+', сейчас '+fmt(wallet.now,2):'')+(q.get('split')==='1'?'; результат сделок делится поровну':'')+'?\nСделки в дневнике не изменятся.')) return;
   const old=accts();
-  S.profile.accounts=list.map((x,i)=>({id: old[i]?old[i].id:'a'+Date.now().toString(36)+i, name:x.name, start:x.start}));
-  if(q.get('split')==='1') S.profile.split=true;
+  S.profile.accounts=list.map((x,i)=>({id: old[i]?old[i].id:'a'+Date.now().toString(36)+i, name:x.name, start:x.start, now: x.now!=null&&isFinite(x.now)?x.now:null}));
+  S.profile.split = q.get('split')==='1';
+  if(wallet) S.profile.wallet=wallet;
   saveProfile(); setTab('diary');
 }
 
@@ -2860,7 +2893,7 @@ function renderEdSum(){
     <div><span>Статус</span><b>${st[0]}</b></div>
     <div><span>P&amp;L до комиссий</span><b class="${c.gross>0?'pos':c.gross<0?'neg':''}">${sgn(c.gross)}</b></div>
     <div><span>Комиссии${c.funding?' / фандинг':''}</span><b>−${fmt(c.fees,2)}${c.funding?' / '+sgn(c.funding):''}</b></div>
-    <div><span>Итог сделки</span><b class="${c.net>0?'pos':c.net<0?'neg':''}">${sgn(c.net)} USDT</b></div>
+    <div><span>Итог сделки</span><b class="${c.net>0?'pos':c.net<0?'neg':''}">${sgn(c.net)} USDT${rub(c.net,true)?` <small>${rub(c.net,true)}</small>`:''}</b></div>
     <div><span>ROE / в R</span><b>${sgn(c.roe,1)}% / ${isFinite(c.R)?sgn(c.R)+'R':'—'}</b></div>
     <div><span>Депозит до → после сделки</span><b>${fmt(balWithout,2)} → ${fmt(balWithout + c.net,2)}</b></div>
     <div><span>Влияние на депозит</span><b class="${c.net>0?'pos':c.net<0?'neg':''}">${balWithout>0?sgn(c.net/balWithout*100,2)+'%':'—'}</b></div>
