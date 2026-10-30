@@ -1370,10 +1370,13 @@ function cashAcct(m){ return acctById(m.account) || accts()[0]; }
 function acctStats(a){
   const A=accts();
   if(a.now!=null && a.now!=='' && isFinite(pnum(a.now))){   // баланс вписан вручную по данным биржи
-    const tr=S.trades.filter(t=>acctOf(t).id===a.id), start=pnum(a.start)||0, bal=pnum(a.now);
+    const tr=S.trades.filter(t=>acctOf(t).id===a.id), start=pnum(a.start)||0;
+    // баланс с биржи — это снимок на момент ввода; сделки, записанные после него, прибавляются и вычитаются
+    const at=+a.nowAt || Date.UTC(2026,9,30,9,0), after=tr.filter(t=>(+t.createdAt||0)>at);
+    const delta=after.reduce((s,t)=>s+(tradeCalc(t).net||0),0), bal=pnum(a.now)+delta;
     let fl=0, nOpen=0, nf=0, margin=0;
     tr.forEach(t=>{ const c=tradeCalc(t); if(c.status==='open'||c.status==='partial'){ nOpen++; margin+=c.marginTot*(1-Math.min(c.closedPct,100)/100); const f=(typeof floating==='function')?floating(t,c):null; if(f){ fl+=f.pnl; nf++; } } });
-    return {start, bal, pnl:bal-start, n:tr.length, nOpen, fl, nf, margin, manual:true, cash:cashList().filter(m=>cashAcct(m).id===a.id).reduce((s,m)=>s+pnum(m.amount),0)};
+    return {start, bal, pnl:bal-start, n:tr.length, nOpen, fl, nf, margin, manual:true, delta, nAfter:after.length, at, cash:cashList().filter(m=>cashAcct(m).id===a.id).reduce((s,m)=>s+pnum(m.amount),0)};
   }
   if(S.profile.split && A.length>1){   // режим «поровну»: результат всех сделок делится между счетами одинаково
     const N=A.length, all=ledger(0, S.trades, []), start=pnum(a.start)||0, pnl=all.balance/N;
@@ -2444,10 +2447,10 @@ function renderAccounts(){
   $('accList').innerHTML = (multi?'':'<p class="hint" style="margin:0 0 10px">Сейчас у вас один счёт. Добавьте второй, например отдельно Bitget и FxPro: у каждого будет свой депозит, плюс и минус, а сверху — общая сумма.</p>') +
    `<div class="acctbl">`+A.map(a=>{ const st=acctStats(a), share=tot>0?Math.max(0,st.bal)/tot*100:0, ed=accEdit===a.id;
     return `<div class="acrow" data-acc="${esc(a.id)}">
-      <div class="acn">${ed?`<input class="acname" value="${esc(a.name)}" aria-label="Название счёта">`:`<b>${esc(a.name)}</b>`}<span class="hint">${st.manual?'баланс по бирже':st.split?`1/${A.length} результата всех сделок`:`${st.n} ${plural(st.n,'сделка','сделки','сделок')}`}${st.nOpen?` · открыто ${st.nOpen}`:''}</span></div>
+      <div class="acn">${ed?`<input class="acname" value="${esc(a.name)}" aria-label="Название счёта">`:`<b>${esc(a.name)}</b>`}<span class="hint">${st.manual?`по бирже на ${new Date(st.at).toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'})}${st.nAfter?` · сделки после: ${sgn(st.delta)}`:''}`:st.split?`1/${A.length} результата всех сделок`:`${st.n} ${plural(st.n,'сделка','сделки','сделок')}`}${st.nOpen?` · открыто ${st.nOpen}`:''}</span></div>
       <div class="ack"><span>Старт</span>${ed?`<input class="acstart" inputmode="decimal" value="${+(+st.start).toFixed(2)}" aria-label="Стартовый депозит">`:`<b>${fmt(st.start,2)}</b>`}</div>
       <div class="ack"><span>Результат</span><b class="${st.pnl>0?'pos':st.pnl<0?'neg':''}">${sgn(st.pnl)}${st.start>0?` <small>${sgn(st.pnl/st.start*100,1)}%</small>`:''}</b><em class="rb">${rub(st.pnl,true)}</em></div>
-      <div class="ack"><span>Сейчас на счёте</span>${ed?`<input class="acnow" inputmode="decimal" value="${a.now!=null&&a.now!==''?a.now:''}" placeholder="по сделкам" aria-label="Сейчас на счёте">`:`<b>${fmt(st.bal,2)}</b><em class="rb">${rub(st.bal)}</em>`}</div>
+      <div class="ack"><span>Сейчас на счёте</span>${ed?`<input class="acnow" inputmode="decimal" value="${st.manual?+st.bal.toFixed(2):''}" placeholder="по сделкам" aria-label="Сейчас на счёте">`:`<b>${fmt(st.bal,2)}</b><em class="rb">${rub(st.bal)}</em>`}</div>
       <div class="ack"><span>Открытые</span><b class="${st.fl>0?'pos':st.fl<0?'neg':''}" data-acf="${esc(a.id)}">${st.nOpen ? (st.nf? sgn(st.fl) : '…') : '—'}</b></div>
       <div class="ack share"><span>Доля</span><b>${fmt(share,0)}%</b><i><em style="width:${share.toFixed(1)}%"></em></i></div>
       <div class="acb">${ed?`<button type="button" class="btn sm" data-accok>Готово</button>${A.length>1&&!st.n&&!st.cash?`<button type="button" class="link neg" data-accdel>Удалить</button>`:''}`:`<button type="button" class="link" data-accedit>Изменить</button>`}</div>
@@ -2477,7 +2480,7 @@ $('accList').addEventListener('click',e=>{
   const row=e.target.closest('[data-acc]'); if(!row) return; const a=acctById(row.dataset.acc); if(!a) return;
   if(e.target.closest('[data-accedit]')){ accEdit=a.id; renderAccounts(); const i=row.parentNode.querySelector(`[data-acc="${CSS.escape(a.id)}"] .acname`); if(i) i.focus(); return; }
   if(e.target.closest('[data-accok]')){ const r=document.querySelector(`[data-acc="${CSS.escape(a.id)}"]`), n=r.querySelector('.acname').value.trim(), v=pnum(r.querySelector('.acstart').value);
-    if(n) a.name=n; if(v>=0) a.start=v; const nw=r.querySelector('.acnow'); if(nw){ const x=String(nw.value).trim(); a.now = x==='' ? null : (isFinite(pnum(x))?pnum(x):a.now); } accEdit=null; saveProfile(); return; }
+    if(n) a.name=n; if(v>=0) a.start=v; const nw=r.querySelector('.acnow'); if(nw){ const x=String(nw.value).trim(); const cur=acctStats(a); if(x===''){ a.now=null; } else if(isFinite(pnum(x)) && (!cur.manual || Math.abs(pnum(x)-cur.bal)>0.004)){ a.now=pnum(x); a.nowAt=Date.now(); } } accEdit=null; saveProfile(); return; }
   if(e.target.closest('[data-accdel]')){ S.profile.accounts=accts().filter(x=>x.id!==a.id); accEdit=null; saveProfile(); }
 });
 $('fAcct').addEventListener('input',()=>{ S.animRows=true; renderTrades(); });
@@ -2497,7 +2500,7 @@ function applyAccLink(){
   if(!list.length) return;
   if(!confirm('Настроить счета: '+list.map(x=>x.name+' — вложено '+fmt(x.start,2)+(isFinite(x.now)&&x.now!=null?', сейчас '+fmt(x.now,2):'')).join('; ')+(wallet?'; криптокошелёк: было '+fmt(wallet.start,2)+', сейчас '+fmt(wallet.now,2)+(wallet.fees?', комиссии за переводы '+fmt(wallet.fees,2):''):'')+(q.get('split')==='1'?'; результат сделок делится поровну':'')+'?\nСделки в дневнике не изменятся.')) return;
   const old=accts();
-  S.profile.accounts=list.map((x,i)=>({id: old[i]?old[i].id:'a'+Date.now().toString(36)+i, name:x.name, start:x.start, now: x.now!=null&&isFinite(x.now)?x.now:null}));
+  S.profile.accounts=list.map((x,i)=>({id: old[i]?old[i].id:'a'+Date.now().toString(36)+i, name:x.name, start:x.start, now: x.now!=null&&isFinite(x.now)?x.now:null, nowAt:Date.now()}));
   S.profile.split = q.get('split')==='1';
   if(wallet) S.profile.wallet=wallet;
   saveProfile(); setTab('diary');
