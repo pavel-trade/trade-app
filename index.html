@@ -2456,7 +2456,7 @@ function renderAccounts(){
   if(wOn) $('walletBox').innerHTML=`<div class="acrow wallet"><div class="acn"><b>Криптокошелёк</b><span class="hint">отсюда деньги ушли на счета</span></div>
     <div class="ack"><span>Было</span><b>${fmt(capStart,2)}</b><em class="rb">${rub(capStart)}</em></div>
     <div class="ack"><span>Сейчас</span><b>${fmt(pnum(W.now),2)}</b><em class="rb">${rub(pnum(W.now))}</em></div>
-    <div class="ack"><span>Ушло с кошелька</span><b>${fmt(capStart-pnum(W.now),2)}</b><em class="rb">${pnum(W.fees)>0?`комиссии −${fmt(pnum(W.fees),2)} · дошло ${fmt(capStart-pnum(W.now)-pnum(W.fees),2)}`:rub(capStart-pnum(W.now))}</em></div>
+    <div class="ack"><span>Ушло с кошелька</span><b>${fmt(capStart-pnum(W.now),2)}</b><em class="rb">${pnum(W.fees)>0?`расходы −${fmt(pnum(W.fees),2)} · дошло ${fmt(capStart-pnum(W.now)-pnum(W.fees),2)}`:rub(capStart-pnum(W.now))}</em></div>
     <div class="ack"><span>Весь капитал</span><b>${fmt(capNow,2)}</b><em class="rb">${rub(capNow)}</em></div>
     <div class="ack"><span>Итог капитала</span><b class="${capNow-capStart>0?'pos':capNow<capStart?'neg':''}">${sgn(capNow-capStart)} <small>${sgn((capNow-capStart)/capStart*100,1)}%</small></b><em class="rb">${rub(capNow-capStart,true)}</em></div><div class="acb"><button type="button" class="link" id="walletEdit">Изменить</button></div></div>`;
   $('accList').innerHTML = (multi?'':'<p class="hint" style="margin:0 0 10px">Сейчас у вас один счёт. Добавьте второй, например отдельно Bitget и FxPro: у каждого будет свой депозит, плюс и минус, а сверху — общая сумма.</p>') +
@@ -2513,13 +2513,23 @@ function applyAccLink(){
   const wq=(q.get('wallet')||'').split(':'), wallet = wq.length>=2 && isFinite(pnum(wq[0])) && isFinite(pnum(wq[1])) ? {start:pnum(wq[0]), now:pnum(wq[1]), fees: wq.length>2&&isFinite(pnum(wq[2]))?pnum(wq[2]):0} : null;
   history.replaceState(null,'',location.pathname+location.hash);
   if(!list.length) return;
-  if(!confirm('Настроить счета: '+list.map(x=>x.name+' — вложено '+fmt(x.start,2)+(isFinite(x.now)&&x.now!=null?', сейчас '+fmt(x.now,2):'')).join('; ')+(wallet?'; криптокошелёк: было '+fmt(wallet.start,2)+', сейчас '+fmt(wallet.now,2)+(wallet.fees?', комиссии за переводы '+fmt(wallet.fees,2):''):'')+(q.get('split')==='1'?'; результат сделок делится поровну':'')+'?\nСделки в дневнике не изменятся.')) return;
+  const reset=q.get('reset')==='1', posV=pnum(q.get('pos')), cq=(q.get('cash')||'').split(':'), cashE = cq.length>=2 && isFinite(pnum(cq[1])) ? {acc:decodeURIComponent(cq[0]).trim(), amount:pnum(cq[1]), note:decodeURIComponent(cq.slice(2).join(':')||'')} : null;
+  if(!confirm((reset?'Удалить ВСЕ сделки из дневника ('+S.trades.length+' шт.)'+(isFinite(posV)?' и записать одну итоговую позицию '+sgn(posV)+' $':'')+'.\n':'')+'Настроить счета: '+list.map(x=>x.name+' — вложено '+fmt(x.start,2)+(isFinite(x.now)&&x.now!=null?', сейчас '+fmt(x.now,2):'')).join('; ')+(wallet?'; криптокошелёк: было '+fmt(wallet.start,2)+', сейчас '+fmt(wallet.now,2)+(wallet.fees?', комиссии за переводы '+fmt(wallet.fees,2):''):'')+(cashE?'; '+cashE.acc+': '+(cashE.amount<0?'вывод ':'пополнение ')+fmt(Math.abs(cashE.amount),2)+(cashE.note?' ('+cashE.note+')':''):'')+(q.get('split')==='1'?'; результат сделок делится поровну':'')+'?'+(reset?'':'\nСделки в дневнике не изменятся.'))) return;
+  if(reset){ const now=Date.now(); S.trades.forEach(t=>{ S.deleted=Object.assign({},S.deleted,{[t.id]:now}); markDirty(t.id); }); S.trades=[]; S.profile.cash=[]; S.draft=null; }
   const old=accts();
   S.profile.accounts=list.map((x,i)=>({id: old[i]?old[i].id:'a'+Date.now().toString(36)+i, name:x.name, start:x.start, now: x.now!=null&&isFinite(x.now)?x.now:null, nowAt:Date.now()}));
+  if(cashE){ const a=S.profile.accounts.find(x=>x.name.toLowerCase()===cashE.acc.toLowerCase()); if(a){ a.start=+((pnum(a.start)||0)+cashE.amount).toFixed(2); S.profile.cash=cashList().concat([{id:'c'+Date.now().toString(36), date:today(), amount:cashE.amount, note:cashE.note, inStart:true, account:a.id}]); } }
+  if(reset && isFinite(posV) && posV!==0){   // одна итоговая позиция на сумму результата торговли
+    const at=Date.now(), loss=posV<0, m=Math.abs(posV)*2;
+    const t={id:'total-'+at.toString(36), account:S.profile.accounts[0].id, coin:'ИТОГ', category:'Итог до '+ddmm(today()), exchange:'', side:'long', date:today(), time:nowHM(), setup:'', tags:[], emo:null, planScore:null, market:'crypto',
+      leverage:1, fee:0, stop:'', tp:'', funding:'', prob:null, plan:null, comment:'Итоговая позиция: общий результат торговли на всех счетах на '+ddmm(today())+'. Записана вместо старых сделок.',
+      entries:[{price:'100', margin:String(m), date:today()}], exits:[{price: loss?'50':'150', pct:'100', date:today()}], createdAt:at, updatedAt:at};
+    S.trades=[t]; markDirty(t.id);
+  }
   S.profile.accounts.forEach(a=>{ if(a.now!=null) takeSnap(a); });
   S.profile.split = q.get('split')==='1';
   if(wallet) S.profile.wallet=wallet;
-  saveProfile(); setTab('diary');
+  saveProfile(); setTab('diary'); if(reset){ S.animRows=true; renderTrades(); }
 }
 
 /* =================== пополнения и выводы =================== */
